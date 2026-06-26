@@ -28,8 +28,12 @@ import datetime
 import requests
 import openpyxl
 import email.utils
+import webbrowser
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Load .env file manually if it exists
 def _load_env():
@@ -48,7 +52,17 @@ _load_env()
 #  USER CONFIGURATION
 # =============================================================================
 
-ACCESS_TOKEN: str = os.getenv("UPSTOX_ACCESS_TOKEN", "YOUR_ACCESS_TOKEN_HERE")
+def get_access_token() -> str:
+    _load_env()
+    return os.getenv("UPSTOX_ACCESS_TOKEN", "YOUR_ACCESS_TOKEN_HERE")
+
+# Upstox API Credentials for OAuth Token Exchange
+CLIENT_ID: str = os.getenv("UPSTOX_CLIENT_ID", "54a272c8-4978-432b-a599-ffc4b32b9e89")
+CLIENT_SECRET: str = os.getenv("UPSTOX_CLIENT_SECRET", "ejvyac8mhy")
+REDIRECT_URI: str = os.getenv("UPSTOX_REDIRECT_URI", "https://www.google.com/")
+
+# Global state to track if current token is unauthorized
+token_invalid: bool = False
 
 # NSE_INDEX|Nifty 50 | NSE_INDEX|Nifty Bank | NSE_INDEX|Nifty Fin Service
 UNDERLYING: str = "NSE_INDEX|Nifty 50"
@@ -57,7 +71,7 @@ UNDERLYING: str = "NSE_INDEX|Nifty 50"
 EXPIRY_DATE = None
 
 # Seconds between live refreshes
-REFRESH_INTERVAL: int = 60
+REFRESH_INTERVAL: int = 5
 
 # Output file  — always ONE file, never creates extra copies
 OUTPUT_FILE: str = os.path.join(
@@ -75,10 +89,17 @@ STRIKES_AROUND_ATM = 20
 # =============================================================================
 
 BASE_URL = "https://api.upstox.com/v2"
+
+# Setup logging to both console and file
+_log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upstox_background.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s  %(message)s",
-    datefmt="%H:%M:%S",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(_log_file, encoding="utf-8")
+    ]
 )
 log = logging.getLogger(__name__)
 
@@ -139,24 +160,135 @@ _PUT_COLS = [
 
 OPTION_CHAIN_COLS = _META_COLS + _CALL_COLS + _STRIKE_COL + _PUT_COLS
 
+def update_env_token(new_token: str):
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    lines = []
+    updated = False
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("UPSTOX_ACCESS_TOKEN="):
+                    lines.append(f"UPSTOX_ACCESS_TOKEN={new_token}\n")
+                    updated = True
+                else:
+                    lines.append(line)
+    if not updated:
+        lines.append(f"UPSTOX_ACCESS_TOKEN={new_token}\n")
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    # Also update current session environment variable
+    os.environ["UPSTOX_ACCESS_TOKEN"] = new_token
+    log.info("New access token saved to .env and loaded into environment.")
+
+
+def refresh_access_token_flow() -> bool:
+    # Formulate authorization URL
+    auth_url = (
+        f"https://api.upstox.com/v2/login/authorization/dialog?"
+        f"response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}"
+    )
+    log.info("Opening browser for Upstox authorization: %s", auth_url)
+    
+    # Try opening the web browser
+    try:
+        webbrowser.open(auth_url)
+    except Exception as e:
+        log.error("Failed to automatically open browser: %s", e)
+        
+    # Open Tkinter Dialogue Box to retrieve code
+    try:
+        # Create a hidden root Tk window to host dialogue
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        
+        prompt_msg = (
+            "Your Upstox session has expired or is invalid.\n\n"
+            "A browser window has been opened for login.\n"
+            "If it did not open automatically, please visit this URL:\n"
+            f"{auth_url}\n\n"
+            "After logging in, copy the 'code' parameter from the address bar\n"
+            "(e.g., from the URL: https://www.google.com/?code=XXXX)\n"
+            "and paste it below:"
+        )
+        
+        code = simpledialog.askstring(
+            title="Upstox Authentication Required",
+            prompt=prompt_msg,
+            parent=root
+        )
+        root.destroy()
+        
+        if not code:
+            log.warning("Authentication cancelled by user (no code entered).")
+            return False
+            
+        code = code.strip()
+        log.info("Received authorization code: %s. Exchanging for access token...", code)
+        
+        # Send post request to exchange code for token
+        token_url = "https://api.upstox.com/v2/login/authorization/token"
+        headers = {
+            "accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "code": code,
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+        
+        r = requests.post(token_url, headers=headers, data=data, timeout=15)
+        r.raise_for_status()
+        res_data = r.json()
+        
+        new_token = res_data.get("access_token")
+        if not new_token:
+            log.error("Exchange response did not contain access_token: %s", res_data)
+            return False
+            
+        # Save token to .env
+        update_env_token(new_token)
+        return True
+        
+    except Exception as e:
+        log.error("Error during authentication flow: %s", e)
+        try:
+            # Show friendly error dialog
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("Upstox Authentication Error", f"Authentication failed:\n{e}")
+            root.destroy()
+        except Exception:
+            pass
+        return False
+
+
 # =============================================================================
 #  API LAYER
 # =============================================================================
 
 def _headers():
-    return {"Authorization": f"Bearer {ACCESS_TOKEN}", "Accept": "application/json"}
+    return {"Authorization": f"Bearer {get_access_token()}", "Accept": "application/json"}
 
 
 def fetch_expiries(instrument_key):
+    global token_invalid
     url = f"{BASE_URL}/option/contract"
     try:
         r = requests.get(url, headers=_headers(),
                          params={"instrument_key": instrument_key}, timeout=15)
+        if r.status_code == 401:
+            token_invalid = True
         r.raise_for_status()
         expiries = sorted(set(c["expiry"] for c in r.json().get("data", []) if c.get("expiry")))
         log.info("Found %d expiry dates for %s", len(expiries), instrument_key)
         return expiries
     except Exception as e:
+        if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 401:
+            token_invalid = True
         log.error("fetch_expiries error: %s", e)
         return []
 
@@ -288,6 +420,24 @@ def _op_append_rows(ws, data, spot, expiry, fetched_at, server_date_str, cols, o
     thin  = _op_border()
     atm   = _atm_strike(data, spot)
 
+    num_data_rows = len(data)
+    expected_total_rows = 2 + num_data_rows
+    record_time = parse_server_date(server_date_str)
+
+    if overwrite and ws.max_row == expected_total_rows:
+        log.info("openpyxl: Sheet '%s' already styled. Updating values only.", ws.title)
+        for off, raw in enumerate(data):
+            row = enrich_row(raw)
+            row["_fetch_time"] = fetched_at
+            row["_record_time"] = record_time
+            row["_spot"]       = spot
+            row["_expiry"]     = expiry
+            row_idx = 3 + off
+            for ci, (_, key, _, _) in enumerate(cols, start=1):
+                c = ws.cell(row=row_idx, column=ci)
+                c.value = row.get(key) if key.startswith("_") else deep_get(row, key)
+        return len(data)
+
     if overwrite and ws.max_row >= 3:
         ws.delete_rows(3, ws.max_row - 2)
 
@@ -298,8 +448,6 @@ def _op_append_rows(ws, data, spot, expiry, fetched_at, server_date_str, cols, o
     call_start, call_end = meta_end + 1, meta_end + len(_CALL_COLS)
     strike_start, strike_end = call_end + 1, call_end + len(_STRIKE_COL)
     put_start, put_end = strike_end + 1, strike_end + len(_PUT_COLS)
-
-    record_time = parse_server_date(server_date_str)
 
     for off, raw in enumerate(data):
         row               = enrich_row(raw)
@@ -374,8 +522,10 @@ def _op_ensure_greeks(wb):
         ws.row_dimensions[ri].height = 20
 
 
-def _load_or_create(filepath, sheet_name):
-    """Load existing workbook or create a new one with dynamic sheet."""
+def _openpyxl_run_multi(expiry_data_list, is_history=False):
+    """Full openpyxl path: load → write all expiries → save once."""
+    filepath = HISTORY_FILE if is_history else OUTPUT_FILE
+    
     if os.path.exists(filepath):
         try:
             wb = openpyxl.load_workbook(filepath)
@@ -388,36 +538,33 @@ def _load_or_create(filepath, sheet_name):
         wb = openpyxl.Workbook()
         is_new = True
 
-    oc_new = False
-    if sheet_name not in wb.sheetnames:
-        wb.create_sheet(sheet_name, 0)
-        oc_new = True
+    for expiry, data, spot, fetched_at, server_date_str in expiry_data_list:
+        sheet_name = expiry
+        oc_new = False
+        if sheet_name not in wb.sheetnames:
+            wb.create_sheet(sheet_name, 0)
+            oc_new = True
+        
+        oc_ws = wb[sheet_name]
+        
+        title_oc = f"OPTION CHAIN  |  {UNDERLYING}  |  Expiry: {expiry}"
+        if is_history:
+            title_oc += "  (HISTORY)"
+
+        if oc_new or oc_ws.max_row < 2:
+            _op_write_header(oc_ws, OPTION_CHAIN_COLS, title_oc, C_CALLS_TITLE)
+
+        _op_append_rows(oc_ws, data, spot, expiry, fetched_at, server_date_str, OPTION_CHAIN_COLS, overwrite=not is_history)
+        log.info("openpyxl: Prepared sheet '%s' (%d rows)", sheet_name, oc_ws.max_row)
 
     if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
         del wb["Sheet"]
 
-    return wb, wb[sheet_name], oc_new or is_new
-
-
-def _openpyxl_run(expiry, data, spot, fetched_at, server_date_str, overwrite=True, is_history=False):
-    """Full openpyxl path: load → write → save."""
-    filepath = HISTORY_FILE if is_history else OUTPUT_FILE
-    wb, oc_ws, ocn = _load_or_create(filepath, expiry)
-
-    title_oc = f"OPTION CHAIN  |  {UNDERLYING}  |  Expiry: {expiry}"
-    if is_history:
-        title_oc += "  (HISTORY)"
-
-    if ocn or oc_ws.max_row < 2:
-        _op_write_header(oc_ws, OPTION_CHAIN_COLS, title_oc, C_CALLS_TITLE)
-
-    nc = _op_append_rows(oc_ws, data, spot, expiry, fetched_at, server_date_str, OPTION_CHAIN_COLS, overwrite)
     _op_ensure_greeks(wb)
 
     wb.save(filepath)
     wb.close()
-    log.info("Saved  -> %s [%s] (%d rows)",
-             filepath, expiry, oc_ws.max_row)
+    log.info("Saved openpyxl -> %s", filepath)
     return True
 
 # =============================================================================
@@ -494,22 +641,8 @@ def _xw_append_rows(xw_sheet, data, spot, expiry, fetched_at, server_date_str, c
     xl_center = -4108   # xlCenter constant
 
     last_row  = _xw_last_row(xw_sheet)
-    if overwrite and last_row >= 3:
-        try:
-            xw_sheet.range((3, 1), (last_row, len(cols))).clear()
-        except Exception as e:
-            log.warning("xlwings clear error: %s", e)
-        last_row = 2
-
-    start_row = last_row + 1
-    n_cols    = len(cols)
-    atm       = _atm_strike(data, spot)
-
-    # Dynamic indices for column categories
-    meta_start, meta_end = 1, len(_META_COLS)
-    call_start, call_end = meta_end + 1, meta_end + len(_CALL_COLS)
-    strike_start, strike_end = call_end + 1, call_end + len(_STRIKE_COL)
-    put_start, put_end = strike_end + 1, strike_end + len(_PUT_COLS)
+    num_data_rows = len(data)
+    expected_total_rows = 2 + num_data_rows
 
     record_time = parse_server_date(server_date_str)
 
@@ -527,6 +660,29 @@ def _xw_append_rows(xw_sheet, data, spot, expiry, fetched_at, server_date_str, c
             row.get(key) if key.startswith("_") else deep_get(row, key)
             for (_, key, _, _) in cols
         ])
+
+    if overwrite and last_row == expected_total_rows:
+        # Just update values in one bulk COM call!
+        log.info("xlwings: Sheet '%s' already styled. Updating values only.", xw_sheet.name)
+        xw_sheet.range(3, 1).value = matrix
+        return len(data)
+
+    if overwrite and last_row >= 3:
+        try:
+            xw_sheet.range((3, 1), (last_row, len(cols))).clear()
+        except Exception as e:
+            log.warning("xlwings clear error: %s", e)
+        last_row = 2
+
+    start_row = last_row + 1
+    n_cols    = len(cols)
+    atm       = _atm_strike(data, spot)
+
+    # Dynamic indices for column categories
+    meta_start, meta_end = 1, len(_META_COLS)
+    call_start, call_end = meta_end + 1, meta_end + len(_CALL_COLS)
+    strike_start, strike_end = call_end + 1, call_end + len(_STRIKE_COL)
+    put_start, put_end = strike_end + 1, strike_end + len(_PUT_COLS)
 
     # ── 1 COM call: write all values at once ──────────────────────────────────
     xw_sheet.range(start_row, 1).value = matrix
@@ -611,7 +767,7 @@ def _xw_ensure_greeks(book):
         log.debug("Greeks Guide via xlwings skipped: %s", e)
 
 
-def _xlwings_run(expiry, data, spot, fetched_at, server_date_str, overwrite=True, is_history=False):
+def _xlwings_run_multi(expiry_data_list, is_history=False):
     """Write directly to the open Excel workbook via xlwings COM. No file I/O."""
     try:
         import xlwings as xw  # type: ignore
@@ -638,25 +794,26 @@ def _xlwings_run(expiry, data, spot, fetched_at, server_date_str, overwrite=True
             log.error("Cannot open via xlwings: %s", e)
             return False
 
-    title_oc = f"OPTION CHAIN  |  {UNDERLYING}  |  Expiry: {expiry}"
-    if is_history:
-        title_oc += "  (HISTORY)"
+    for expiry, data, spot, fetched_at, server_date_str in expiry_data_list:
+        title_oc = f"OPTION CHAIN  |  {UNDERLYING}  |  Expiry: {expiry}"
+        if is_history:
+            title_oc += "  (HISTORY)"
 
-    # Sheet name is the expiry date
-    sheet_name = expiry
-    try:
-        xws = book.sheets[sheet_name]
-    except Exception:
-        xws = book.sheets.add(sheet_name)
+        sheet_name = expiry
+        try:
+            xws = book.sheets[sheet_name]
+        except Exception:
+            xws = book.sheets.add(sheet_name)
 
-    _xw_ensure_headers(xws, OPTION_CHAIN_COLS, title_oc, C_CALLS_TITLE)
-    n = _xw_append_rows(xws, data, spot, expiry, fetched_at, server_date_str, OPTION_CHAIN_COLS, overwrite)
-    log.info("xlwings: +%d rows → '%s' (%s, total row %d)", n, sheet_name, filename, _xw_last_row(xws))
+        _xw_ensure_headers(xws, OPTION_CHAIN_COLS, title_oc, C_CALLS_TITLE)
+        n = _xw_append_rows(xws, data, spot, expiry, fetched_at, server_date_str, OPTION_CHAIN_COLS, overwrite=not is_history)
+        log.info("xlwings: Prepared sheet '%s' (%s, total row %d)", sheet_name, filename, _xw_last_row(xws))
 
     _xw_ensure_greeks(book)
     book.save()
     log.info("Saved via xlwings -> %s", filepath)
     return True
+
 
 # =============================================================================
 #  FILE LOCK CHECK
@@ -672,63 +829,33 @@ def _is_locked(filepath):
     except (PermissionError, IOError):
         return True
 
+
 # =============================================================================
 #  MAIN LOOP
 # =============================================================================
 
-def run_once(expiry):
+def fetch_expiry_chain(expiry):
+    global token_invalid
     fetched_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log.info("Fetching | %s | expiry=%s", UNDERLYING, expiry)
-
     try:
         data, server_date_str = fetch_option_chain(UNDERLYING, expiry)
-    except requests.HTTPError as e:
-        log.error("HTTP error for expiry %s: %s", expiry, e)
-        return False
+        if not data:
+            log.warning("Empty response for expiry %s — market may be closed.", expiry)
+            return None
+        spot = get_spot_price(data)
+        log.info("Spot: %s  |  Strikes fetched: %d for expiry %s", spot, len(data), expiry)
+        data = filter_strikes(data, spot, STRIKES_AROUND_ATM)
+        return (expiry, data, spot, fetched_at, server_date_str)
     except Exception as e:
+        if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 401:
+            token_invalid = True
         log.error("Fetch error for expiry %s: %s", expiry, e)
-        return False
-
-    if not data:
-        log.warning("Empty response for expiry %s — market may be closed.", expiry)
-        return False
-
-    spot = get_spot_price(data)
-    log.info("Spot: %s  |  Strikes fetched: %d", spot, len(data))
-    data = filter_strikes(data, spot, STRIKES_AROUND_ATM)
-
-    # 1. Update/overwrite the live file
-    live_res = False
-    try:
-        if _is_locked(OUTPUT_FILE):
-            live_res = _xlwings_run(expiry, data, spot, fetched_at, server_date_str, overwrite=True, is_history=False)
-        else:
-            live_res = _openpyxl_run(expiry, data, spot, fetched_at, server_date_str, overwrite=True, is_history=False)
-    except Exception as e:
-        log.error("Failed writing live file for expiry %s: %s", expiry, e)
-
-    # 2. Append to the history file
-    hist_res = False
-    try:
-        if _is_locked(HISTORY_FILE):
-            hist_res = _xlwings_run(expiry, data, spot, fetched_at, server_date_str, overwrite=False, is_history=True)
-        else:
-            hist_res = _openpyxl_run(expiry, data, spot, fetched_at, server_date_str, overwrite=False, is_history=True)
-    except Exception as e:
-        log.error("Failed writing history file for expiry %s: %s", expiry, e)
-
-    return live_res and hist_res
+        return None
 
 
 def main():
-    if ACCESS_TOKEN == "YOUR_ACCESS_TOKEN_HERE":
-        log.error(
-            "\n  ACCESS_TOKEN not set!\n\n"
-            "  PowerShell:\n"
-            "    $env:UPSTOX_ACCESS_TOKEN = 'your_token'\n"
-            "    python upstox_option_chain.py\n"
-        )
-        sys.exit(1)
+    global token_invalid
 
     log.info("=" * 65)
     log.info("  Upstox Live Option Chain (Multi-Expiry)")
@@ -739,7 +866,21 @@ def main():
     log.info("  Strikes    : %s around ATM", STRIKES_AROUND_ATM or "ALL")
     log.info("=" * 65)
 
+    # Initialize check on startup
+    token = get_access_token()
+    if token == "YOUR_ACCESS_TOKEN_HERE" or not token:
+        token_invalid = True
+
     while True:
+        if token_invalid:
+            log.warning("Access token is invalid, expired, or missing. Triggering login flow...")
+            success = refresh_access_token_flow()
+            if success:
+                token_invalid = False
+            else:
+                log.warning("Login flow did not complete successfully. Retrying in 60s...")
+                time.sleep(60)
+                continue
         # Determine expiries to fetch
         if EXPIRY_DATE:
             expiries_to_fetch = [EXPIRY_DATE]
@@ -755,15 +896,41 @@ def main():
         if not expiries_to_fetch:
             log.warning("No expiry dates to fetch in this cycle.")
         else:
-            log.info("Starting refresh cycle for %d expiry dates...", len(expiries_to_fetch))
-            for i, expiry in enumerate(expiries_to_fetch, 1):
-                log.info("[%d/%d] Processing expiry: %s", i, len(expiries_to_fetch), expiry)
+            log.info("Starting concurrent refresh cycle for %d expiry dates...", len(expiries_to_fetch))
+            
+            results = []
+            with ThreadPoolExecutor(max_workers=min(10, len(expiries_to_fetch))) as executor:
+                future_to_expiry = {executor.submit(fetch_expiry_chain, expiry): expiry for expiry in expiries_to_fetch}
+                for future in as_completed(future_to_expiry):
+                    expiry = future_to_expiry[future]
+                    try:
+                        res = future.result()
+                        if res:
+                            results.append(res)
+                    except Exception as e:
+                        log.error("Exception during fetch for expiry %s: %s", expiry, e)
+            
+            if results:
+                # Sort results by expiry date (ascending)
+                results.sort(key=lambda x: x[0])
+                
+                # 1. Update/overwrite the live file
                 try:
-                    run_once(expiry)
+                    if _is_locked(OUTPUT_FILE):
+                        _xlwings_run_multi(results, is_history=False)
+                    else:
+                        _openpyxl_run_multi(results, is_history=False)
                 except Exception as e:
-                    log.error("Exception during run_once for %s: %s", expiry, e)
-                # Short delay to prevent hitting API rate limits
-                time.sleep(0.5)
+                    log.error("Failed writing live file: %s", e)
+
+                # 2. Append to the history file
+                try:
+                    if _is_locked(HISTORY_FILE):
+                        _xlwings_run_multi(results, is_history=True)
+                    else:
+                        _openpyxl_run_multi(results, is_history=True)
+                except Exception as e:
+                    log.error("Failed writing history file: %s", e)
 
         log.info("Next refresh cycle in %d s …", REFRESH_INTERVAL)
         time.sleep(REFRESH_INTERVAL)
