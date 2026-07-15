@@ -21,6 +21,10 @@ import requests as req_lib
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 import db
 import formula_engine
@@ -360,8 +364,8 @@ def api_status():
 
 @app.route("/api/auth/url")
 def api_auth_url():
-    client_id = db.get_config("client_id", "54a272c8-4978-432b-a599-ffc4b32b9e89")
-    redirect_uri = db.get_config("redirect_uri", "https://www.google.com/")
+    client_id = db.get_config("client_id") or os.getenv("UPSTOX_CLIENT_ID", "")
+    redirect_uri = db.get_config("redirect_uri") or os.getenv("UPSTOX_REDIRECT_URI", "https://www.google.com/")
     url = (
         "https://api.upstox.com/v2/login/authorization/dialog"
         f"?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}"
@@ -376,9 +380,9 @@ def api_auth_token():
     if not code:
         return jsonify({"error": "No code provided"}), 400
 
-    client_id     = db.get_config("client_id",     "54a272c8-4978-432b-a599-ffc4b32b9e89")
-    client_secret = db.get_config("client_secret", "ejvyac8mhy")
-    redirect_uri  = db.get_config("redirect_uri",  "https://www.google.com/")
+    client_id     = db.get_config("client_id") or os.getenv("UPSTOX_CLIENT_ID", "")
+    client_secret = db.get_config("client_secret") or os.getenv("UPSTOX_CLIENT_SECRET", "")
+    redirect_uri  = db.get_config("redirect_uri") or os.getenv("UPSTOX_REDIRECT_URI", "https://www.google.com/")
 
     try:
         r = req_lib.post(
@@ -628,8 +632,8 @@ def api_get_config():
         "underlying":        state.underlying,
         "strikes_around_atm": state.strikes_around_atm,
         "refresh_interval":  state.refresh_interval,
-        "client_id":         db.get_config("client_id",     "54a272c8-4978-432b-a599-ffc4b32b9e89"),
-        "redirect_uri":      db.get_config("redirect_uri",  "https://www.google.com/"),
+        "client_id":         db.get_config("client_id") or os.getenv("UPSTOX_CLIENT_ID", ""),
+        "redirect_uri":      db.get_config("redirect_uri") or os.getenv("UPSTOX_REDIRECT_URI", "https://www.google.com/"),
         "has_token":         bool(db.get_config("access_token", "")),
         "underlyings":       upstox_api.UNDERLYINGS,
     })
@@ -776,11 +780,11 @@ def _bootstrap():
 
     # Persist defaults
     for key, val in [
-        ("client_id",     "54a272c8-4978-432b-a599-ffc4b32b9e89"),
-        ("client_secret", "ejvyac8mhy"),
-        ("redirect_uri",  "https://www.google.com/"),
+        ("client_id",     os.getenv("UPSTOX_CLIENT_ID", "")),
+        ("client_secret", os.getenv("UPSTOX_CLIENT_SECRET", "")),
+        ("redirect_uri",  os.getenv("UPSTOX_REDIRECT_URI", "https://www.google.com/")),
     ]:
-        if not db.get_config(key):
+        if not db.get_config(key) and val:
             db.set_config(key, val)
 
     # Restore saved underlying

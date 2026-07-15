@@ -1,4 +1,4 @@
-﻿# ⚡ UpstoxPro — Live Option Chain Dashboard
+# ⚡ UpstoxPro — Live Option Chain Dashboard
 
 A real-time **Upstox option chain** web application that streams live data via WebSocket, stores snapshots to MySQL, and provides a professional trading dashboard with Greeks, Formula Builder, and historical analysis.
 
@@ -79,25 +79,33 @@ python -m venv .venv
 pip install -r web_app\requirements.txt
 ```
 
-### 4. Set up MySQL
+### 4. Set up Configuration (`.env`)
 
-Make sure MySQL is running on `localhost:3306`. The app will **auto-create** the database and all tables on first run using these credentials:
+1. Copy `.env.example` to `.env` in the root directory:
+   ```bash
+   copy .env.example .env
+   ```
+2. Configure your MySQL credentials and Upstox API credentials in the `.env` file:
 
-| Setting | Value |
-|---|---|
-| Host | `localhost` |
-| Port | `3306` |
-| User | `root` |
-| Password | `Logieagle@123` |
-| Database | `upstox_option_chain` (auto-created) |
+| Key | Description | Default |
+|---|---|---|
+| `DB_HOST` | MySQL server host | `localhost` |
+| `DB_PORT` | MySQL server port | `3306` |
+| `DB_USER` | MySQL username | `root` |
+| `DB_PASSWORD` | MySQL password | *Your MySQL password* |
+| `DB_NAME` | MySQL database name | `upstox_option_chain` |
+| `UPSTOX_CLIENT_ID` | Upstox API Client ID | |
+| `UPSTOX_CLIENT_SECRET` | Upstox API Client Secret | |
+| `UPSTOX_REDIRECT_URI` | Upstox API Redirect URI | `https://www.google.com/` |
 
-> To change credentials, edit the constants at the top of `web_app/db.py`.
+The application will **auto-create** the database and all tables on the first run using these credentials.
 
 ### 5. Get Upstox API credentials
 
 1. Go to [developer.upstox.com](https://developer.upstox.com) and create an app
 2. Note your **Client ID** and **Client Secret**
-3. Set the **Redirect URI** to `https://www.google.com/` (or any valid URI you control)
+3. Set the **Redirect URI** to `https://www.google.com/` (or any valid URI you control) and update your `.env` file accordingly.
+
 
 ---
 

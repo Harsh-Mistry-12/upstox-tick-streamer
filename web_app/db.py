@@ -1,24 +1,28 @@
 """
 MySQL database layer for Upstox Option Chain Web App.
-Host: localhost | User: root | Password: Logieagle@123 | Port: 3306
 """
 import logging
+import os
 from datetime import datetime, date
+from dotenv import load_dotenv
 
 import mysql.connector
 from mysql.connector import pooling, Error
 
 log = logging.getLogger(__name__)
 
+# Load environment variables
+load_dotenv()
+
 # ---------------------------------------------------------------------------
 # Connection config
 # ---------------------------------------------------------------------------
 
-DB_HOST = "localhost"
-DB_USER = "root"
-DB_PASSWORD = "Logieagle@123"
-DB_PORT = 3306
-DB_NAME = "upstox_option_chain"
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_NAME = os.getenv("DB_NAME", "upstox_option_chain")
 
 _pool: pooling.MySQLConnectionPool | None = None
 
