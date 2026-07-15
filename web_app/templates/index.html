@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UpstoxPro — Live Option Chain</title>
+  <meta name="description" content="Real-time Upstox option chain dashboard — Greeks tracker, Formula Builder, historical data." />
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="/static/socket.io.min.js"></script>
+  <script src="/static/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ══════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════ -->
+  <header class="header">
+    <!-- Logo -->
+    <div class="logo">
+      <div class="logo-mark">⚡</div>
+      <div>
+        <div class="logo-name">UpstoxPro</div>
+      </div>
+      <span class="logo-tag">PRO</span>
+    </div>
+
+    <div class="h-sep"></div>
+
+    <!-- Stream status -->
+    <span id="ws-badge" class="stream-badge waiting">
+      <span class="pulse"></span>Connecting
+    </span>
+
+    <div class="h-sep"></div>
+
+    <!-- Instrument + Spot -->
+    <div class="h-instrument">
+      <span>Index:</span>
+      <strong id="h-underlying">Nifty 50</strong>
+    </div>
+
+    <div id="spot-ticker" class="spot-ticker">₹ —</div>
+
+    <div class="h-flex"></div>
+
+    <!-- Last fetch info -->
+    <div class="h-timer">
+      <span style="color:var(--muted-fg)">Last fetch</span>
+      <span id="h-fetch-time">—</span>
+    </div>
+
+    <div class="h-sep"></div>
+
+    <!-- Stream controls -->
+    <button id="btn-start" class="h-btn primary" onclick="startStream()">▶ Start</button>
+    <button id="btn-stop"  class="h-btn danger"  onclick="stopStream()">⏸ Pause</button>
+  </header>
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <span class="nav-section-label">Trading</span>
+
+    <div class="nav-item active" data-page="live">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Live Chain</span>
+    </div>
+
+    <div class="nav-item" data-page="greeks">
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">Greeks</span>
+    </div>
+
+    <div class="nav-item" data-page="formulas">
+      <span class="nav-icon">🧮</span>
+      <span class="nav-label">Formula Builder</span>
+    </div>
+
+    <div class="nav-item" data-page="history">
+      <span class="nav-icon">📂</span>
+      <span class="nav-label">History</span>
+    </div>
+
+    <div class="nav-divider"></div>
+    <span class="nav-section-label">System</span>
+
+    <div class="nav-item" data-page="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </div>
+
+    <div class="nav-item" data-page="guide">
+      <span class="nav-icon">📚</span>
+      <span class="nav-label">Greeks Guide</span>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <!-- collapse toggle -->
+    <button class="nav-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar">
+      <span class="nav-collapse-icon">&#171;</span>
+      <span class="nav-label">Collapse</span>
+    </button>
+
+    <!-- sidebar footer -->
+    <div style="padding: 8px 10px; font-size: 0.6rem; color: var(--muted-fg);">
+      <div id="sb-fetch-count">Fetch #0</div>
+    </div>
+  </nav>
+
+  <!-- ══════════════════════════════════════════
+       MAIN
+  ══════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- ══ PAGE: LIVE OPTION CHAIN ══ -->
+    <section id="live-page" class="page active">
+
+      <!-- KPI Row -->
+      <div class="kpi-grid">
+        <div class="kpi info-kpi">
+          <div class="kpi-label">Spot Price</div>
+          <div class="kpi-value info-color font-mono" id="kpi-spot">—</div>
+          <div class="kpi-sub" id="kpi-underlying-sub">Nifty 50</div>
+        </div>
+        <div class="kpi atm-kpi">
+          <div class="kpi-label">ATM Strike</div>
+          <div class="kpi-value atm-color font-mono" id="kpi-atm">—</div>
+          <div class="kpi-sub">Nearest to spot</div>
+        </div>
+        <div class="kpi accent-kpi">
+          <div class="kpi-label">Put-Call Ratio</div>
+          <div class="kpi-value font-mono" id="kpi-pcr">—</div>
+          <div id="kpi-pcr-badge" class="kpi-badge neut">Neutral</div>
+        </div>
+        <div class="kpi call-kpi">
+          <div class="kpi-label">ATM Call IV</div>
+          <div class="kpi-value call-color font-mono" id="kpi-call-iv">—</div>
+          <div class="kpi-sub">Implied Volatility</div>
+        </div>
+        <div class="kpi put-kpi">
+          <div class="kpi-label">ATM Put IV</div>
+          <div class="kpi-value put-color font-mono" id="kpi-put-iv">—</div>
+          <div class="kpi-sub">Implied Volatility</div>
+        </div>
+        <div class="kpi call-kpi">
+          <div class="kpi-label">Total Call OI</div>
+          <div class="kpi-value call-color font-mono" id="kpi-call-oi">—</div>
+          <div class="kpi-sub">Open Interest</div>
+        </div>
+        <div class="kpi put-kpi">
+          <div class="kpi-label">Total Put OI</div>
+          <div class="kpi-value put-color font-mono" id="kpi-put-oi">—</div>
+          <div class="kpi-sub">Open Interest</div>
+        </div>
+      </div>
+
+      <!-- Chain Card -->
+      <div class="card">
+        <!-- Card Header -->
+        <div class="card-head">
+          <span class="card-title">
+            <span class="ico">🔗</span> Live Option Chain
+            <span class="badge badge-accent" id="strike-count-badge" style="margin-left:4px;display:none"></span>
+          </span>
+          <div class="flex gap-4 items-center">
+            <!-- % Change Toggle -->
+            <div class="toggle-pill" id="pct-toggle-pill" title="Toggle % change labels">
+              <div class="toggle-track on" id="pct-toggle-track"></div>
+              <span class="toggle-text">Show % Change</span>
+            </div>
+            <!-- Greeks Toggle -->
+            <div class="toggle-pill" id="greeks-toggle-pill" title="Toggle Greeks columns">
+              <div class="toggle-track on" id="greeks-toggle-track"></div>
+              <span class="toggle-text">Show Greeks</span>
+            </div>
+            <!-- Formula Precision Select -->
+            <div class="flex items-center gap-2">
+              <span class="toggle-text">Formula Decimals:</span>
+              <select id="formula-precision-select" style="background:var(--bg-hover);border:1px solid var(--border);color:var(--dim-fg);border-radius:4px;font-size:0.7rem;padding:2px 6px;font-family:inherit;cursor:pointer">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expiry Tabs -->
+        <div class="expiry-bar" id="expiry-bar">
+          <span class="expiry-bar-label">Expiry</span>
+          <div class="flex items-center gap-2" id="expiry-tabs">
+            <span class="text-muted text-xs flex items-center gap-2">
+              <div class="loading-ring" style="width:14px;height:14px;border-width:2px"></div>
+              Fetching expiries…
+            </span>
+          </div>
+        </div>
+
+        <!-- Info bar: spot, PCR, expiry, legend -->
+        <div class="table-infobar" id="table-infobar" style="display:none">
+          <div class="infobar-item">
+            <span class="infobar-label">Spot</span>
+            <span class="infobar-val text-info" id="ib-spot">—</span>
+          </div>
+          <span class="infobar-sep">·</span>
+          <div class="infobar-item">
+            <span class="infobar-label">PCR</span>
+            <span class="infobar-val" id="ib-pcr">—</span>
+          </div>
+          <span class="infobar-sep">·</span>
+          <div class="infobar-item">
+            <span class="infobar-label">Expiry</span>
+            <span class="infobar-val" id="ib-expiry">—</span>
+          </div>
+          <span class="infobar-sep">·</span>
+          <div class="infobar-item">
+            <span class="infobar-label">Strikes</span>
+            <span class="infobar-val" id="ib-strikes">—</span>
+          </div>
+          <!-- Color Legend -->
+          <div class="chain-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:var(--call-mid)"></span>ITM Call</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--atm-dim)"></span>ATM ★</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--put-mid)"></span>ITM Put</span>
+            <span class="text-xs text-muted">Click any row → Greeks</span>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="oc-scroll">
+          <div id="chain-table-wrapper">
+            <div class="empty-state">
+              <div class="empty-icon">⚡</div>
+              <div class="empty-title">Waiting for live data…</div>
+              <div class="empty-desc">Authenticate in Settings, then click ▶ Start to begin streaming the option chain.</div>
+              <div class="empty-action">
+                <button class="btn btn-primary btn-sm" onclick="navigate('settings')">Go to Settings →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ PAGE: GREEKS DASHBOARD ══ -->
+    <section id="greeks-page" class="page">
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title"><span class="ico">📈</span> Greeks Dashboard</span>
+          <span class="text-xs text-muted">💡 Click any row in Live Chain to auto-fill strike</span>
+        </div>
+        <div class="greeks-selector-row">
+          <div class="form-group" style="flex: 0 0 180px">
+            <label class="form-label">Expiry Date</label>
+            <select id="greeks-expiry-sel">
+              <option value="">— select expiry —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 0 0 140px">
+            <label class="form-label">Strike Price</label>
+            <input type="number" id="greeks-strike-input" placeholder="e.g. 24500" step="50" />
+          </div>
+          <div class="form-group" style="flex: 0 0 120px">
+            <label class="form-label">History Points</label>
+            <select id="greeks-limit">
+              <option value="50">50 points</option>
+              <option value="100" selected>100 points</option>
+              <option value="200">200 points</option>
+            </select>
+          </div>
+          <div class="form-group shrink">
+            <label class="form-label">&nbsp;</label>
+            <button class="btn btn-primary" onclick="loadGreeksHistory()">🔍 Load Greeks</button>
+          </div>
+          <div id="greeks-current-info" style="display:none; margin-left:auto; text-align:right">
+            <div class="text-xs text-muted">Showing Strike</div>
+            <div class="font-mono font-bold text-atm" id="greeks-header-strike">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts grid -->
+      <div id="greeks-charts-area">
+        <div class="empty-state">
+          <div class="empty-icon">📈</div>
+          <div class="empty-title">Select expiry &amp; strike, then click Load</div>
+          <div class="empty-desc">See how Delta, Gamma, Theta, Vega, IV and LTP changed over time for any strike.</div>
+        </div>
+      </div>
+
+      <!-- Change Summary Table -->
+      <div class="card" id="greeks-change-card" style="display:none">
+        <div class="card-head">
+          <span class="card-title"><span class="ico">📊</span> Greeks Change Summary</span>
+          <span class="text-xs text-muted" id="greeks-range-label">Session change</span>
+        </div>
+        <div id="greeks-table-wrapper"></div>
+      </div>
+    </section>
+
+    <!-- ══ PAGE: FORMULA BUILDER ══ -->
+    <section id="formulas-page" class="page">
+
+      <!-- Header explainer -->
+      <div class="card">
+        <div class="card-body-sm">
+          <div class="flex items-center gap-3">
+            <span style="font-size:1.6rem">🧮</span>
+            <div>
+              <div class="font-bold" style="font-size: 0.85rem; margin-bottom: 2px;">Formula Builder</div>
+              <div class="text-xs text-dim">Create custom calculations from option chain data. Each formula becomes an extra column in the Live Chain table. Use the variable chips below to build expressions — no coding required.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="formula-layout">
+
+        <!-- Left: builder form -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title" id="formula-form-title"><span class="ico">➕</span> New Formula</span>
+            <button class="btn btn-ghost btn-sm" onclick="clearFormulaForm()">✖ Clear</button>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+            <input type="hidden" id="formula-id" />
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Formula Name</label>
+                <input type="text" id="formula-name-input" placeholder="e.g. Synthetic Future" />
+              </div>
+              <div class="form-group" style="flex:0 0 auto;min-width:0">
+                <label class="form-label">Color</label>
+                <input type="color" id="formula-color-input" value="#60a5fa" title="Column header color" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Expression</label>
+              <textarea id="formula-expr-input" rows="3" placeholder="Type or click variables below, e.g.: call_ltp - put_ltp"></textarea>
+              <div id="formula-validation-msg"></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Description <span class="text-muted">(optional)</span></label>
+              <input type="text" id="formula-desc-input" placeholder="What does this measure?" />
+            </div>
+
+            <!-- Variable chips -->
+            <div>
+              <div class="var-section-label">📗 Call variables — click to insert</div>
+              <div class="var-chip-group">
+                <span class="var-chip call" onclick="insertVar('call_ltp')" title="Last Traded Price">call_ltp</span>
+                <span class="var-chip call" onclick="insertVar('call_oi')" title="Open Interest">call_oi</span>
+                <span class="var-chip call" onclick="insertVar('call_chg_oi')" title="Change in OI">call_chg_oi</span>
+                <span class="var-chip call" onclick="insertVar('call_iv')" title="Implied Volatility %">call_iv</span>
+                <span class="var-chip call" onclick="insertVar('call_delta')" title="Delta Δ">call_delta</span>
+                <span class="var-chip call" onclick="insertVar('call_gamma')" title="Gamma Γ">call_gamma</span>
+                <span class="var-chip call" onclick="insertVar('call_theta')" title="Theta Θ">call_theta</span>
+                <span class="var-chip call" onclick="insertVar('call_vega')" title="Vega V">call_vega</span>
+                <span class="var-chip call" onclick="insertVar('call_pop')" title="Probability of Profit">call_pop</span>
+                <span class="var-chip call" onclick="insertVar('call_volume')" title="Volume">call_volume</span>
+              </div>
+
+              <div class="var-section-label">📕 Put variables — click to insert</div>
+              <div class="var-chip-group">
+                <span class="var-chip put" onclick="insertVar('put_ltp')">put_ltp</span>
+                <span class="var-chip put" onclick="insertVar('put_oi')">put_oi</span>
+                <span class="var-chip put" onclick="insertVar('put_chg_oi')">put_chg_oi</span>
+                <span class="var-chip put" onclick="insertVar('put_iv')">put_iv</span>
+                <span class="var-chip put" onclick="insertVar('put_delta')">put_delta</span>
+                <span class="var-chip put" onclick="insertVar('put_gamma')">put_gamma</span>
+                <span class="var-chip put" onclick="insertVar('put_theta')">put_theta</span>
+                <span class="var-chip put" onclick="insertVar('put_vega')">put_vega</span>
+                <span class="var-chip put" onclick="insertVar('put_pop')">put_pop</span>
+                <span class="var-chip put" onclick="insertVar('put_volume')">put_volume</span>
+              </div>
+
+              <div class="var-section-label">🔷 Other values &amp; math functions</div>
+              <div class="var-chip-group">
+                <span class="var-chip" onclick="insertVar('strike')" title="Strike price">strike</span>
+                <span class="var-chip" onclick="insertVar('spot')" title="Spot price">spot</span>
+                <span class="var-chip" onclick="insertVar('pcr')" title="Put-Call Ratio">pcr</span>
+                <span class="var-chip" onclick="insertVar('is_atm')" title="1 if ATM, 0 otherwise">is_atm</span>
+                <span class="var-chip" onclick="insertVar('abs()')">abs()</span>
+                <span class="var-chip" onclick="insertVar('round()')">round()</span>
+                <span class="var-chip" onclick="insertVar('sqrt()')">sqrt()</span>
+                <span class="var-chip" onclick="insertVar('min(,)')">min()</span>
+                <span class="var-chip" onclick="insertVar('max(,)')">max()</span>
+                <span class="var-chip" onclick="insertVar('log()')">log()</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-full btn-lg" id="formula-save-btn">💾 Save Formula</button>
+          </div>
+        </div>
+
+        <!-- Right: saved + examples -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+
+          <!-- Saved formulas -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title"><span class="ico">📋</span> Saved Formulas</span>
+              <span class="text-xs text-muted">Extra columns in Live Chain</span>
+            </div>
+            <div id="formula-list" style="padding: 10px 14px; display:flex;flex-direction:column;gap:8px;">
+              <div class="empty-state" style="padding:20px">
+                <div class="loading-ring"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Example formulas -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title"><span class="ico">💡</span> Example Formulas</span>
+              <span class="text-xs text-muted">Click to auto-fill</span>
+            </div>
+            <div class="card-body-sm formula-examples">
+              <button class="formula-example" onclick="insertExample('call_ltp - put_ltp','Synthetic Future')">
+                <span class="fe-name">Synthetic Future</span>
+                <span class="fe-expr">call_ltp - put_ltp</span>
+              </button>
+              <button class="formula-example" onclick="insertExample('call_iv - put_iv','IV Skew')">
+                <span class="fe-name">IV Skew</span>
+                <span class="fe-expr">call_iv - put_iv</span>
+              </button>
+              <button class="formula-example" onclick="insertExample('call_oi / put_oi','Strike PCR')">
+                <span class="fe-name">Per-Strike PCR</span>
+                <span class="fe-expr">call_oi / put_oi</span>
+              </button>
+              <button class="formula-example" onclick="insertExample('abs(call_theta) + abs(put_theta)','Total Theta')">
+                <span class="fe-name">Total Theta</span>
+                <span class="fe-expr">abs(call_theta) + abs(put_theta)</span>
+              </button>
+              <button class="formula-example" onclick="insertExample('call_delta + put_delta','Net Delta')">
+                <span class="fe-name">Net Delta</span>
+                <span class="fe-expr">call_delta + put_delta</span>
+              </button>
+              <button class="formula-example" onclick="insertExample('call_vega + put_vega','Total Vega')">
+                <span class="fe-name">Total Vega</span>
+                <span class="fe-expr">call_vega + put_vega</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ PAGE: HISTORY ══ -->
+    <section id="history-page" class="page">
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title"><span class="ico">📂</span> Historical Snapshots</span>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-accent" id="history-count" style="display:none"></span>
+            <button id="btn-export-csv"   class="btn btn-ghost btn-sm" onclick="exportHistoryCSV()"   disabled title="Export as CSV">⬇ CSV</button>
+            <button id="btn-export-excel" class="btn btn-ghost btn-sm" onclick="exportHistoryExcel()" disabled title="Export as Excel-compatible file">⬇ Excel</button>
+          </div>
+        </div>
+        <div class="history-filters">
+          <div class="form-group" style="flex:0 0 160px">
+            <label class="form-label">Expiry</label>
+            <select id="history-expiry-sel">
+              <option value="">— select —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 180px">
+            <label class="form-label">From</label>
+            <input type="datetime-local" id="history-from" />
+          </div>
+          <div class="form-group" style="flex:1 1 180px">
+            <label class="form-label">To</label>
+            <input type="datetime-local" id="history-to" />
+          </div>
+          <div class="form-group" style="flex:0 0 110px">
+            <label class="form-label">Max Rows</label>
+            <select id="history-limit">
+              <option value="200">200</option>
+              <option value="500" selected>500</option>
+              <option value="1000">1000</option>
+              <option value="2000">2000</option>
+            </select>
+          </div>
+          <div class="form-group shrink">
+            <label class="form-label">&nbsp;</label>
+            <button class="btn btn-primary" onclick="loadHistory()">🔍 Load</button>
+          </div>
+        </div>
+        <!-- Quick date-range preset chips -->
+        <div class="history-presets">
+          <span class="preset-label">Quick range:</span>
+          <button class="preset-chip" onclick="setHistoryRange(30)">30 min</button>
+          <button class="preset-chip" onclick="setHistoryRange(60)">1 hr</button>
+          <button class="preset-chip" onclick="setHistoryRange(180)">3 hrs</button>
+          <button class="preset-chip" onclick="setHistoryRange(360)">6 hrs</button>
+          <button class="preset-chip" onclick="setHistoryRange('today')">Today</button>
+          <button class="preset-chip" onclick="setHistoryRange('all')">All</button>
+        </div>
+      </div>
+
+      <div class="card" style="overflow:hidden">
+        <div id="history-table-wrapper">
+          <div class="empty-state">
+            <div class="empty-icon">📂</div>
+            <div class="empty-title">No data loaded</div>
+            <div class="empty-desc">Select an expiry, pick a time range or use the quick presets, then click Load.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ PAGE: SETTINGS ══ -->
+    <section id="settings-page" class="page">
+      <div class="settings-grid">
+
+        <!-- Auth -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title"><span class="ico">🔑</span> Authentication</span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+
+            <div id="token-status-badge" class="auth-status bad">
+              <span>❌</span> Not authenticated — streaming paused
+            </div>
+
+            <div class="auth-method">
+              <!-- OAuth -->
+              <div class="auth-option">
+                <div class="auth-option-header">
+                  <div class="auth-num">A</div>
+                  <div class="auth-option-title">OAuth Login</div>
+                  <span class="auth-option-rec">RECOMMENDED</span>
+                </div>
+                <div class="auth-option-body">
+                  <div class="auth-note">Opens the Upstox login page. After logging in you'll be redirected — copy the <code>code=XXXX</code> from the URL and paste below.</div>
+                  <button class="btn btn-primary btn-sm" onclick="openAuthUrl()">🌐 Open Upstox Login Page</button>
+                  <div id="auth-code-section" style="display:none;margin-top:4px">
+                    <div class="auth-note" id="auth-redirect-note"></div>
+                    <div class="flex gap-2 mt-2">
+                      <input type="text" id="auth-code-input" placeholder="Paste auth code here…" />
+                      <button class="btn btn-success btn-sm" onclick="submitAuthCode()">✔ Exchange</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Manual token -->
+              <div class="auth-option">
+                <div class="auth-option-header">
+                  <div class="auth-num">B</div>
+                  <div class="auth-option-title">Paste Access Token</div>
+                </div>
+                <div class="auth-option-body">
+                  <div class="auth-note">If you already have a valid <code>access_token</code> (from Upstox developer console or your .env file), paste it directly.</div>
+                  <div class="flex gap-2">
+                    <input type="password" id="manual-token-input" placeholder="eyJhbGci…" style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;flex:1" />
+                    <button class="btn btn-primary btn-sm" onclick="submitManualToken()">💾 Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stream Config -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title"><span class="ico">⚙️</span> Stream Configuration</span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+            <div class="form-group">
+              <label class="form-label">Underlying Index</label>
+              <select id="cfg-underlying">
+                <option value="NSE_INDEX|Nifty 50">Nifty 50</option>
+                <option value="NSE_INDEX|Nifty Bank">Nifty Bank</option>
+                <option value="NSE_INDEX|Nifty Fin Service">Nifty Fin Service</option>
+                <option value="NSE_INDEX|NIFTY MID SELECT">Nifty Midcap Select</option>
+                <option value="BSE_INDEX|SENSEX">Sensex</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Strikes around ATM: <strong id="cfg-strikes-val">20</strong> each side</label>
+              <input type="range" id="cfg-strikes" min="5" max="50" value="20" data-display="cfg-strikes-val" />
+              <div class="form-hint">Shows 40 strikes total (20 above + 20 below ATM)</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Refresh Interval (seconds)</label>
+              <input type="number" id="cfg-refresh" min="3" max="60" value="5" />
+              <div class="form-hint">Minimum 3s — data stored to MySQL on every fetch</div>
+            </div>
+
+            <hr class="divider" />
+
+            <div class="form-group">
+              <label class="form-label">Client ID</label>
+              <input type="text" id="cfg-client-id" placeholder="From Upstox developer portal" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Client Secret</label>
+              <input type="password" id="cfg-client-secret" placeholder="Leave blank to keep existing" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Redirect URI</label>
+              <input type="text" id="cfg-redirect-uri" placeholder="https://www.google.com/" />
+            </div>
+
+            <button class="btn btn-primary btn-full" onclick="saveConfig()">💾 Save Configuration</button>
+          </div>
+        </div>
+
+        <!-- Database Info -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title"><span class="ico">🗄️</span> Database Info</span>
+          </div>
+          <div class="card-body">
+            <div class="db-row"><span class="db-key">Host</span><span class="db-val">localhost:3306</span></div>
+            <div class="db-row"><span class="db-key">Database</span><span class="db-val">upstox_option_chain</span></div>
+            <div class="db-row"><span class="db-key">User</span><span class="db-val">root</span></div>
+            <div class="db-row"><span class="db-key">Tables</span><span class="db-val">config, option_chain_snapshots, formulas</span></div>
+            <div class="db-row"><span class="db-key">Snapshot rate</span><span class="db-val">Every 5 seconds</span></div>
+            <div class="db-row"><span class="db-key">Retention</span><span class="db-val">Unlimited</span></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ══ PAGE: GREEKS GUIDE ══ -->
+    <section id="guide-page" class="page">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title"><span class="ico">📚</span> Option Greeks — Quick Reference</span>
+          <span class="text-xs text-muted">Hover columns in the Live Chain table for tooltips</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="gg-table">
+            <thead>
+              <tr>
+                <th>Greek</th>
+                <th>Symbol</th>
+                <th>What it means</th>
+                <th>Typical Range</th>
+                <th>Interpretation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="gg-greek text-info">Delta</td>
+                <td class="font-mono text-info">Δ</td>
+                <td>How much the option price moves when the underlying moves ₹1</td>
+                <td class="font-mono">Call: 0 → 1<br>Put: -1 → 0</td>
+                <td>ATM ≈ 0.5. Higher delta = more sensitive to spot.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek text-info">Gamma</td>
+                <td class="font-mono text-info">Γ</td>
+                <td>Rate of change of Delta per ₹1 move in underlying</td>
+                <td class="font-mono">Always positive; peaks at ATM</td>
+                <td>High Gamma near expiry = rapid Delta swings. Risky.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek text-put">Theta</td>
+                <td class="font-mono text-put">Θ</td>
+                <td>Daily time decay — how much the option loses per day (in ₹)</td>
+                <td class="font-mono">Always negative</td>
+                <td>Higher absolute value = faster decay. Sellers profit from Theta.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek text-call">Vega</td>
+                <td class="font-mono text-call">V</td>
+                <td>Option price change per 1% increase in Implied Volatility</td>
+                <td class="font-mono">Always positive</td>
+                <td>High Vega = sensitive to IV changes. Peaks near ATM.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek text-atm">IV</td>
+                <td class="font-mono text-atm">—</td>
+                <td>Implied Volatility — the market's expectation of future price range</td>
+                <td class="font-mono">% annualised (e.g. 14%)</td>
+                <td>High IV → expensive options. Compare call IV vs put IV for skew.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek">PoP%</td>
+                <td class="font-mono">—</td>
+                <td>Probability of Profit — statistical chance the option expires in-the-money</td>
+                <td class="font-mono">0–100%</td>
+                <td>ATM ≈ 50%. Deep ITM call ≈ 80–90%. Sellers aim for &lt;30% PoP.</td>
+              </tr>
+              <tr>
+                <td class="gg-greek">PCR</td>
+                <td class="font-mono">—</td>
+                <td>Put-Call Ratio — Total Put OI divided by Total Call OI</td>
+                <td class="font-mono">&gt;1 bearish · &lt;1 bullish</td>
+                <td>PCR &gt; 1.2 often signals oversold (contrarian bullish). &lt; 0.7 = bearish.</td>
+              </tr>
+              <tr style="background:var(--row-itm-call)">
+                <td class="gg-greek text-call">ITM Call</td>
+                <td class="font-mono">—</td>
+                <td>In-the-Money call — Strike &lt; Spot price</td>
+                <td class="font-mono">—</td>
+                <td>Has intrinsic value. <span style="display:inline-block;width:10px;height:10px;background:var(--call-mid);border-radius:2px;vertical-align:middle"></span> Green rows in table.</td>
+              </tr>
+              <tr style="background:var(--row-atm)">
+                <td class="gg-greek text-atm">ATM ★</td>
+                <td class="font-mono">—</td>
+                <td>At-the-Money — Strike nearest to current Spot</td>
+                <td class="font-mono">—</td>
+                <td>Highest Gamma &amp; Vega. <span style="display:inline-block;width:10px;height:10px;background:var(--atm-dim);border-radius:2px;vertical-align:middle"></span> Amber row in table.</td>
+              </tr>
+              <tr style="background:var(--row-itm-put)">
+                <td class="gg-greek text-put">ITM Put</td>
+                <td class="font-mono">—</td>
+                <td>In-the-Money put — Strike &gt; Spot price</td>
+                <td class="font-mono">—</td>
+                <td>Has intrinsic value. <span style="display:inline-block;width:10px;height:10px;background:var(--put-mid);border-radius:2px;vertical-align:middle"></span> Rose rows in table.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script src="/static/app.js"></script>
+<script>
+function insertExample(expr, name) {
+  document.getElementById('formula-expr-input').value = expr;
+  if (!document.getElementById('formula-name-input').value)
+    document.getElementById('formula-name-input').value = name;
+  document.getElementById('formula-expr-input').dispatchEvent(new Event('input'));
+  document.getElementById('formula-form-card').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+
+<!-- ══ GREEKS TABLE MODAL ══ -->
+<div id="greeks-modal" class="gm-overlay" onclick="closeGreeksModal(event)" style="display:none" aria-modal="true" role="dialog">
+  <div class="gm-box">
+    <div class="gm-header">
+      <div>
+        <span class="gm-title" id="gm-title">Greeks Data</span>
+        <span class="gm-sub" id="gm-sub"></span>
+      </div>
+      <button class="gm-close" onclick="closeGreeksModal()" title="Close">✕</button>
+    </div>
+    <div class="gm-body">
+      <!-- Modal Chart Container -->
+      <div id="gm-chart-container" style="height: 180px; margin-bottom: 20px; position: relative;">
+        <canvas id="gm-chart"></canvas>
+      </div>
+      <div id="gm-table-wrap"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,3 +1,5 @@
 .venv/
 .env
 *.xlsx
+__pycache__/
+*.log
