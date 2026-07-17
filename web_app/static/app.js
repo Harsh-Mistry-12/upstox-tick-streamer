@@ -9,32 +9,32 @@ const socket = io({ transports: ['websocket', 'polling'] });
 
 // ── Application State ─────────────────────────────────────
 const App = {
-  page:              'live',
-  currentExpiry:     null,
-  expiries:          [],
-  priorityExpiries:  [],       // [current, next] — always streamed in background
-  chainData:         {},       // { expiry: [rows] }
-  prevData:          {},       // previous snapshot for % change
-  formulaResults:    {},       // { expiry: { strike: { fid: result } } }
-  formulas:          [],
-  showPct:           true,    // % change badges visible by default
-  showGreeks:        true,
-  formulaPrecision:  4,
-  underlying:        'NSE_INDEX|Nifty 50',
-  greeksCharts:      {},
-  greeksStrike:      null,
-  greeksExpiry:      null,
-  streaming:         localStorage.getItem('upstox_streaming') === 'true',
-  tokenValid:        localStorage.getItem('upstox_token_valid') === 'true',
+  page: 'live',
+  currentExpiry: null,
+  expiries: [],
+  priorityExpiries: [],       // [current, next] — always streamed in background
+  chainData: {},       // { expiry: [rows] }
+  prevData: {},       // previous snapshot for % change
+  formulaResults: {},       // { expiry: { strike: { fid: result } } }
+  formulas: [],
+  showPct: true,    // % change badges visible by default
+  showGreeks: true,
+  formulaPrecision: 4,
+  underlying: 'NSE_INDEX|Nifty 50',
+  greeksCharts: {},
+  greeksStrike: null,
+  greeksExpiry: null,
+  streaming: localStorage.getItem('upstox_streaming') === 'true',
+  tokenValid: localStorage.getItem('upstox_token_valid') === 'true',
   onDemandPollTimer: null,
-  onDemandExpiry:    null,
-  historyRows:       [],
-  historyExpiry:     '',
-  modalChart:        null,     // Chart instance for the Greeks modal
+  onDemandExpiry: null,
+  historyRows: [],
+  historyExpiry: '',
+  modalChart: null,     // Chart instance for the Greeks modal
 };
 
 // ── DOM Helpers ───────────────────────────────────────────
-const $  = id  => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const el = tag => document.createElement(tag);
 
 function fmt(v, d = 2) {
@@ -68,7 +68,7 @@ function shortUnderlying(s) {
 function toast(msg, type = 'info', ms = 4000) {
   const icons = { ok: '✅', err: '❌', info: 'ℹ️', warn: '⚠️' };
   const wrap = $('toast-wrap');
-  const div  = el('div');
+  const div = el('div');
   div.className = `toast ${type}`;
   div.innerHTML = `<span>${icons[type] || '●'}</span> <span>${msg}</span>
     <span class="toast-close" onclick="this.parentElement.remove()">×</span>`;
@@ -93,7 +93,7 @@ function navigate(page) {
   if (navEl) navEl.classList.add('active');
 
   // auto-refresh
-  if (page === 'greeks'   && App.greeksExpiry && App.greeksStrike) loadGreeksHistory();
+  if (page === 'greeks' && App.greeksExpiry && App.greeksStrike) loadGreeksHistory();
   if (page === 'formulas') fetchAndRenderFormulas();
 }
 
@@ -117,25 +117,25 @@ socket.on('connect', () => {
 socket.on('disconnect', () => updateBadge('disconnected'));
 
 socket.on('status_update', d => {
-  App.streaming  = d.streaming;
+  App.streaming = d.streaming;
   App.tokenValid = d.token_valid;
   // Persist so the next page load shows correct state immediately
   try {
-    localStorage.setItem('upstox_streaming',   String(d.streaming));
+    localStorage.setItem('upstox_streaming', String(d.streaming));
     localStorage.setItem('upstox_token_valid', String(d.token_valid));
-  } catch (_) {}
+  } catch (_) { }
   updateBadge(d.streaming && d.token_valid ? 'live' : d.token_valid ? 'paused' : 'auth');
   updateStreamButtons();
   syncTokenBadge(d.token_valid);
 });
 
 socket.on('option_chain_update', d => {
-  App.underlying       = d.underlying || App.underlying;
-  App.expiries         = d.expiries   || [];
+  App.underlying = d.underlying || App.underlying;
+  App.expiries = d.expiries || [];
   // `priority_expiries` is the subset the background always streams
   App.priorityExpiries = d.priority_expiries || App.expiries.slice(0, 2);
-  App.formulaResults   = Object.assign({}, App.formulaResults, d.formula_results || {});
-  App.prevData         = JSON.parse(JSON.stringify(App.chainData));
+  App.formulaResults = Object.assign({}, App.formulaResults, d.formula_results || {});
+  App.prevData = JSON.parse(JSON.stringify(App.chainData));
   // Merge incoming data (only priority expiries) into cached chainData
   const incoming = d.data || {};
   Object.keys(incoming).forEach(exp => { App.chainData[exp] = incoming[exp]; });
@@ -186,22 +186,22 @@ function updateBadge(state) {
   const b = $('ws-badge');
   if (!b) return;
   const states = {
-    live:         { cls: 'live',    text: 'LIVE',           pulse: true  },
-    paused:       { cls: 'stopped', text: 'PAUSED',         pulse: false },
-    auth:         { cls: 'stopped', text: 'AUTH REQUIRED',  pulse: false },
-    connected:    { cls: 'waiting', text: 'Connecting…',    pulse: true  },
-    disconnected: { cls: 'stopped', text: 'DISCONNECTED',   pulse: false },
+    live: { cls: 'live', text: 'LIVE', pulse: true },
+    paused: { cls: 'stopped', text: 'PAUSED', pulse: false },
+    auth: { cls: 'stopped', text: 'AUTH REQUIRED', pulse: false },
+    connected: { cls: 'waiting', text: 'Connecting…', pulse: true },
+    disconnected: { cls: 'stopped', text: 'DISCONNECTED', pulse: false },
   };
   const s = states[state] || states.connected;
   b.className = `stream-badge ${s.cls}`;
-  b.innerHTML = `<span class="pulse${s.pulse?' anim':''}"></span>${s.text}`;
+  b.innerHTML = `<span class="pulse${s.pulse ? ' anim' : ''}"></span>${s.text}`;
 }
 
 function updateStreamButtons() {
   const start = $('btn-start');
-  const stop  = $('btn-stop');
+  const stop = $('btn-stop');
   if (start) start.disabled = App.streaming;
-  if (stop)  stop.disabled  = !App.streaming;
+  if (stop) stop.disabled = !App.streaming;
 }
 
 function syncTokenBadge(valid) {
@@ -217,9 +217,9 @@ function syncTokenBadge(valid) {
 let _prevSpot = null;
 function updateSpotTicker() {
   const expiry = App.currentExpiry;
-  const rows   = expiry ? App.chainData[expiry] : null;
-  const spot   = rows?.[0]?.spot_price;
-  const el     = $('spot-ticker');
+  const rows = expiry ? App.chainData[expiry] : null;
+  const spot = rows?.[0]?.spot_price;
+  const el = $('spot-ticker');
   if (!el) return;
 
   el.textContent = spot ? `₹ ${fmt(spot, 2)}` : '₹ —';
@@ -231,31 +231,31 @@ function updateSpotTicker() {
 
 // ── KPI Cards ─────────────────────────────────────────────
 function updateKPIs() {
-  const exp  = App.currentExpiry || App.expiries[0];
+  const exp = App.currentExpiry || App.expiries[0];
   const rows = exp ? App.chainData[exp] : null;
   if (!rows?.length) return;
 
-  const spot  = rows[0]?.spot_price;
-  const atm   = rows.find(r => r.is_atm);
-  const pcr   = rows[0]?.pcr;
-  const callOI= rows.reduce((s, r) => s + (r.call_oi || 0), 0);
-  const putOI = rows.reduce((s, r) => s + (r.put_oi  || 0), 0);
+  const spot = rows[0]?.spot_price;
+  const atm = rows.find(r => r.is_atm);
+  const pcr = rows[0]?.pcr;
+  const callOI = rows.reduce((s, r) => s + (r.call_oi || 0), 0);
+  const putOI = rows.reduce((s, r) => s + (r.put_oi || 0), 0);
 
-  setText('kpi-spot',    spot    ? fmt(spot, 2) : '—');
-  setText('kpi-atm',     atm     ? fmt(atm.strike_price, 0) : '—');
-  setText('kpi-pcr',     pcr     ? parseFloat(pcr).toFixed(3) : '—');
+  setText('kpi-spot', spot ? fmt(spot, 2) : '—');
+  setText('kpi-atm', atm ? fmt(atm.strike_price, 0) : '—');
+  setText('kpi-pcr', pcr ? parseFloat(pcr).toFixed(3) : '—');
   setText('kpi-call-iv', atm?.call_iv ? fmt(atm.call_iv, 2) + '%' : '—');
-  setText('kpi-put-iv',  atm?.put_iv  ? fmt(atm.put_iv, 2)  + '%' : '—');
+  setText('kpi-put-iv', atm?.put_iv ? fmt(atm.put_iv, 2) + '%' : '—');
   setText('kpi-call-oi', fmtInt(callOI));
-  setText('kpi-put-oi',  fmtInt(putOI));
+  setText('kpi-put-oi', fmtInt(putOI));
 
   // PCR badge
   const pcrBadge = $('kpi-pcr-badge');
   if (pcrBadge && pcr) {
     const n = parseFloat(pcr);
-    if (n > 1.1)      { pcrBadge.className = 'kpi-badge bear'; pcrBadge.textContent = 'Bearish Trend'; }
+    if (n > 1.1) { pcrBadge.className = 'kpi-badge bear'; pcrBadge.textContent = 'Bearish Trend'; }
     else if (n < 0.9) { pcrBadge.className = 'kpi-badge bull'; pcrBadge.textContent = 'Bullish Trend'; }
-    else              { pcrBadge.className = 'kpi-badge neut'; pcrBadge.textContent = 'Neutral';       }
+    else { pcrBadge.className = 'kpi-badge neut'; pcrBadge.textContent = 'Neutral'; }
   }
 }
 
@@ -265,7 +265,7 @@ function setText(id, v) { const e = $(id); if (e) e.textContent = v; }
 function toggleSidebar() {
   const layout = document.querySelector('.layout');
   const collapsed = layout.classList.toggle('sidebar-collapsed');
-  try { localStorage.setItem('upstox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+  try { localStorage.setItem('upstox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) { }
 }
 
 // ── Expiry Tabs ───────────────────────────────────────────
@@ -277,9 +277,9 @@ function toggleSidebar() {
 async function fetchOnDemandExpiry(expiry) {
   try {
     await fetch('/api/fetch_expiry', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ expiry }),
+      body: JSON.stringify({ expiry }),
     });
     // The actual data arrives via the 'on_demand_expiry_update' WS event
   } catch (e) {
@@ -314,7 +314,7 @@ function renderExpiryTabs() {
 
   if (!App.currentExpiry && App.expiries.length > 0) {
     App.currentExpiry = App.expiries[0];
-    App.greeksExpiry  = App.expiries[0];
+    App.greeksExpiry = App.expiries[0];
   }
 
   container.innerHTML = '';
@@ -366,35 +366,33 @@ function renderExpiryTabs() {
     const sel = $(id);
     if (!sel) return;
     const cur = sel.value;
-    sel.innerHTML = App.expiries.map(e => `<option value="${e}" ${e===cur?'selected':''}>${e}</option>`).join('');
+    sel.innerHTML = App.expiries.map(e => `<option value="${e}" ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
     if (!cur && App.currentExpiry) sel.value = App.currentExpiry;
   });
 }
 
 // ── Option Chain Table ────────────────────────────────────
 const CALL_COLS = [
-  { key: 'call_volume', label: 'Volume',  fmt: fmtInt,      tip: 'Traded volume today' },
-  { key: 'call_oi',     label: 'OI',      fmt: fmtInt,      tip: 'Open Interest — total outstanding contracts' },
-  { key: 'call_chg_oi', label: 'Chg OI',  fmt: fmtInt,      tip: 'Change in OI from previous close' },
-  { key: 'call_ltp',    label: 'LTP',     fmt: v => fmt(v, 2), tip: 'Last Traded Price' },
-  { key: 'call_iv',     label: 'IV %',    fmt: v => fmt(v, 2), tip: 'Implied Volatility (%)' },
-  { key: 'call_delta',  label: 'Delta Δ', fmt: v => fmt(v, 4), tip: 'Price change per ₹1 spot move (0 → 1)' },
-  { key: 'call_gamma',  label: 'Gamma Γ', fmt: v => fmt(v, 5), tip: 'Rate of Delta change per ₹1 spot move' },
-  { key: 'call_theta',  label: 'Theta Θ', fmt: v => fmt(v, 2), tip: 'Daily time decay in ₹ (always negative)' },
-  { key: 'call_vega',   label: 'Vega V',  fmt: v => fmt(v, 4), tip: 'Price change per 1% IV increase' },
-  { key: 'call_pop',    label: 'PoP %',   fmt: v => fmt(v, 2), tip: 'Probability of Profit at expiry' },
+  { key: 'call_volume', label: 'Volume', fmt: fmtInt, tip: 'Traded volume today' },
+  { key: 'call_vega', label: 'Vega V', fmt: v => fmt(v, 4), tip: 'Price change per 1% IV increase' },
+  { key: 'call_gamma', label: 'Gamma Γ', fmt: v => fmt(v, 5), tip: 'Rate of Delta change per ₹1 spot move' },
+  { key: 'call_theta', label: 'Theta Θ', fmt: v => fmt(v, 2), tip: 'Daily time decay in ₹ (always negative)' },
+  { key: 'call_delta', label: 'Delta Δ', fmt: v => fmt(v, 4), tip: 'Price change per ₹1 spot move (0 → 1)' },
+  { key: 'call_chg_oi', label: 'Chg OI', fmt: fmtInt, tip: 'Change in OI from previous close' },
+  { key: 'call_oi', label: 'OI', fmt: fmtInt, tip: 'Open Interest — total outstanding contracts' },
+  { key: 'call_ltp', label: 'LTP', fmt: v => fmt(v, 2), tip: 'Last Traded Price' },
+  { key: 'call_iv', label: 'IV %', fmt: v => fmt(v, 2), tip: 'Implied Volatility (%)' },
 ];
 const PUT_COLS = [
-  { key: 'put_ltp',     label: 'LTP',     fmt: v => fmt(v, 2), tip: 'Put Last Traded Price' },
-  { key: 'put_iv',      label: 'IV %',    fmt: v => fmt(v, 2), tip: 'Put Implied Volatility' },
-  { key: 'put_delta',   label: 'Delta Δ', fmt: v => fmt(v, 4), tip: 'Put Delta (-1 → 0)' },
-  { key: 'put_gamma',   label: 'Gamma Γ', fmt: v => fmt(v, 5), tip: 'Put Gamma' },
-  { key: 'put_theta',   label: 'Theta Θ', fmt: v => fmt(v, 2), tip: 'Put daily time decay' },
-  { key: 'put_vega',    label: 'Vega V',  fmt: v => fmt(v, 4), tip: 'Put Vega' },
-  { key: 'put_pop',     label: 'PoP %',   fmt: v => fmt(v, 2), tip: 'Put Probability of Profit' },
-  { key: 'put_chg_oi',  label: 'Chg OI',  fmt: fmtInt,         tip: 'Put OI change from prev close' },
-  { key: 'put_oi',      label: 'OI',      fmt: fmtInt,         tip: 'Put Open Interest' },
-  { key: 'put_volume',  label: 'Volume',  fmt: fmtInt,         tip: 'Put volume today' },
+  { key: 'put_iv', label: 'IV %', fmt: v => fmt(v, 2), tip: 'Put Implied Volatility' },
+  { key: 'put_ltp', label: 'LTP', fmt: v => fmt(v, 2), tip: 'Put Last Traded Price' },
+  { key: 'put_oi', label: 'OI', fmt: fmtInt, tip: 'Put Open Interest' },
+  { key: 'put_chg_oi', label: 'Chg OI', fmt: fmtInt, tip: 'Put OI change from prev close' },
+  { key: 'put_delta', label: 'Delta Δ', fmt: v => fmt(v, 4), tip: 'Put Delta (-1 → 0)' },
+  { key: 'put_theta', label: 'Theta Θ', fmt: v => fmt(v, 2), tip: 'Put daily time decay' },
+  { key: 'put_gamma', label: 'Gamma Γ', fmt: v => fmt(v, 5), tip: 'Put Gamma' },
+  { key: 'put_vega', label: 'Vega V', fmt: v => fmt(v, 4), tip: 'Put Vega' },
+  { key: 'put_volume', label: 'Volume', fmt: fmtInt, tip: 'Put volume today' },
 ];
 
 function pctChange(cur, prev, key) {
@@ -421,7 +419,7 @@ function rowClass(row) {
 
 function renderChainTable() {
   const expiry = App.currentExpiry;
-  const rows   = expiry ? App.chainData[expiry] : null;
+  const rows = expiry ? App.chainData[expiry] : null;
   const wrapper = $('chain-table-wrapper');
   if (!wrapper) return;
 
@@ -443,17 +441,17 @@ function renderChainTable() {
 
   // active formulas
   const fCols = App.formulas.filter(f => f.active !== false);
-  const frExp  = App.formulaResults[expiry] || {};
+  const frExp = App.formulaResults[expiry] || {};
   const hasFormulas = fCols.length > 0;
 
   // Filter columns based on Greeks toggle
   const activeCallCols = App.showGreeks
     ? CALL_COLS
-    : CALL_COLS.filter(c => !['call_delta', 'call_gamma', 'call_theta', 'call_vega', 'call_pop'].includes(c.key));
+    : CALL_COLS.filter(c => !['call_delta', 'call_gamma', 'call_theta', 'call_vega'].includes(c.key));
 
   const activePutCols = App.showGreeks
     ? PUT_COLS
-    : PUT_COLS.filter(c => !['put_delta', 'put_gamma', 'put_theta', 'put_vega', 'put_pop'].includes(c.key));
+    : PUT_COLS.filter(c => !['put_delta', 'put_gamma', 'put_theta', 'put_vega'].includes(c.key));
 
   const totalCols = activeCallCols.length + 1 + activePutCols.length + fCols.length;
   const spotVal = rows[0]?.spot_price;
@@ -469,27 +467,27 @@ function renderChainTable() {
         ${hasFormulas ? `<th class="gh-formula" colspan="${fCols.length}">FORMULAS</th>` : ''}
       </tr>
       <tr class="col-row">
-        ${activeCallCols.map(c => `<th class="ch-call" title="${c.tip||''}">${c.label}</th>`).join('')}
+        ${activeCallCols.map(c => `<th class="ch-call" title="${c.tip || ''}">${c.label}</th>`).join('')}
         <th class="ch-strike">Strike</th>
-        ${activePutCols.map(c => `<th class="ch-put" title="${c.tip||''}">${c.label}</th>`).join('')}
+        ${activePutCols.map(c => `<th class="ch-put" title="${c.tip || ''}">${c.label}</th>`).join('')}
         ${fCols.map(f => `<th style="background:rgba(99,102,241,0.06);color:${f.color};font-size:0.58rem;text-transform:uppercase;letter-spacing:0.04em;padding:6px 6px;border-bottom:1px solid var(--border)">${f.name}</th>`).join('')}
       </tr>
     </thead>
     <tbody>`;
 
   rows.forEach((row, idx) => {
-    const rc    = rowClass(row) || (idx % 2 === 0 ? 'row-even' : '');
-    const prev  = prevMap[row.strike_price] || null;
+    const rc = rowClass(row) || (idx % 2 === 0 ? 'row-even' : '');
+    const prev = prevMap[row.strike_price] || null;
 
     h += `<tr class="${rc}" data-strike="${row.strike_price}">`;
 
     // Call cells
     activeCallCols.forEach(col => {
-      const v  = row[col.key];
+      const v = row[col.key];
       const pct = App.showPct ? pctChange(row, prev, col.key) : '';
       const isItm = spotVal != null && row.strike_price < spotVal;
       const itmClass = isItm ? ' itm-call' : '';
-      h += `<td class="call-side text-right${itmClass}" title="${col.tip||''}">${col.fmt(v)}${pct}</td>`;
+      h += `<td class="call-side text-right${itmClass}" title="${col.tip || ''}">${col.fmt(v)}${pct}</td>`;
     });
 
     // Strike cell
@@ -497,20 +495,20 @@ function renderChainTable() {
 
     // Put cells
     activePutCols.forEach(col => {
-      const v   = row[col.key];
+      const v = row[col.key];
       const pct = App.showPct ? pctChange(row, prev, col.key) : '';
       const isItm = spotVal != null && row.strike_price > spotVal;
       const itmClass = isItm ? ' itm-put' : '';
-      h += `<td class="put-side text-right${itmClass}" title="${col.tip||''}">${col.fmt(v)}${pct}</td>`;
+      h += `<td class="put-side text-right${itmClass}" title="${col.tip || ''}">${col.fmt(v)}${pct}</td>`;
     });
 
     // Formula cells
     fCols.forEach(f => {
       const sk = Number(row.strike_price) % 1 === 0 ? String(parseInt(row.strike_price)) : String(row.strike_price);
       const fr = frExp[sk]?.[String(f.id)];
-      if (!fr)       h += `<td class="text-right text-muted">—</td>`;
+      if (!fr) h += `<td class="text-right text-muted">—</td>`;
       else if (fr.error) h += `<td class="text-right text-muted" title="${fr.error}">Err</td>`;
-      else               h += `<td class="text-right" style="color:${fr.color}">${fmt(fr.value, App.formulaPrecision)}</td>`;
+      else h += `<td class="text-right" style="color:${fr.color}">${fmt(fr.value, App.formulaPrecision)}</td>`;
     });
 
     h += '</tr>';
@@ -551,12 +549,12 @@ function showInfoBar(rows, expiry) {
   bar.style.display = 'flex';
 
   const spot = rows[0]?.spot_price;
-  const pcr  = rows[0]?.pcr;
+  const pcr = rows[0]?.pcr;
   const pcrNum = parseFloat(pcr);
   const pcrColor = pcrNum > 1.1 ? 'var(--put)' : pcrNum < 0.9 ? 'var(--call)' : 'var(--atm)';
 
-  setText('ib-spot',    spot ? `₹ ${fmt(spot, 2)}` : '—');
-  setText('ib-expiry',  expiry || '—');
+  setText('ib-spot', spot ? `₹ ${fmt(spot, 2)}` : '—');
+  setText('ib-expiry', expiry || '—');
   setText('ib-strikes', `${rows.length} strikes`);
 
   const ibPcr = $('ib-pcr');
@@ -611,9 +609,9 @@ if (formulaPrecisionSelect) {
 
 // ── Greeks Dashboard ──────────────────────────────────────
 function loadGreeksHistory() {
-  const expiry = $('greeks-expiry-sel')?.value  || App.greeksExpiry;
+  const expiry = $('greeks-expiry-sel')?.value || App.greeksExpiry;
   const strike = $('greeks-strike-input')?.value || App.greeksStrike;
-  const limit  = $('greeks-limit')?.value        || 100;
+  const limit = $('greeks-limit')?.value || 100;
 
   if (!expiry || !strike) {
     toast('Select an expiry and strike price first.', 'warn'); return;
@@ -627,7 +625,7 @@ function loadGreeksHistory() {
 
   const headerInfo = $('greeks-current-info');
   const headerStrike = $('greeks-header-strike');
-  if (headerInfo)  headerInfo.style.display = 'block';
+  if (headerInfo) headerInfo.style.display = 'block';
   if (headerStrike) headerStrike.textContent = `${strike}`;
 
   fetch(`/api/greeks/history?expiry=${expiry}&strike=${strike}&limit=${limit}`)
@@ -655,12 +653,12 @@ function renderGreeksCharts(rows) {
   const CALL_C = '#10b981', PUT_C = '#f43f5e';
 
   const chartDefs = [
-    { id:'gc-ltp',   title:'LTP',     cK:'call_ltp',   pK:'put_ltp',   dec:2, desc:'Last Traded Price' },
-    { id:'gc-delta', title:'Delta Δ', cK:'call_delta', pK:'put_delta', dec:4, desc:'Price sensitivity per ₹1 spot move' },
-    { id:'gc-gamma', title:'Gamma Γ', cK:'call_gamma', pK:'put_gamma', dec:6, desc:'Rate of Delta change' },
-    { id:'gc-theta', title:'Theta Θ', cK:'call_theta', pK:'put_theta', dec:2, desc:'Daily time decay (₹)' },
-    { id:'gc-vega',  title:'Vega V',  cK:'call_vega',  pK:'put_vega',  dec:4, desc:'Price change per 1% IV shift' },
-    { id:'gc-iv',    title:'IV %',    cK:'call_iv',    pK:'put_iv',    dec:2, desc:'Implied Volatility' },
+    { id: 'gc-ltp', title: 'LTP', cK: 'call_ltp', pK: 'put_ltp', dec: 2, desc: 'Last Traded Price' },
+    { id: 'gc-delta', title: 'Delta Δ', cK: 'call_delta', pK: 'put_delta', dec: 4, desc: 'Price sensitivity per ₹1 spot move' },
+    { id: 'gc-gamma', title: 'Gamma Γ', cK: 'call_gamma', pK: 'put_gamma', dec: 6, desc: 'Rate of Delta change' },
+    { id: 'gc-theta', title: 'Theta Θ', cK: 'call_theta', pK: 'put_theta', dec: 2, desc: 'Daily time decay (₹)' },
+    { id: 'gc-vega', title: 'Vega V', cK: 'call_vega', pK: 'put_vega', dec: 4, desc: 'Price change per 1% IV shift' },
+    { id: 'gc-iv', title: 'IV %', cK: 'call_iv', pK: 'put_iv', dec: 2, desc: 'Implied Volatility' },
   ];
 
   area.innerHTML = `<div class="greeks-charts-grid">
@@ -710,11 +708,11 @@ function renderGreeksCharts(rows) {
     scales: {
       x: {
         ticks: { color: '#475569', maxTicksLimit: 6, font: { size: 9 } },
-        grid:  { color: 'rgba(255,255,255,0.025)' },
+        grid: { color: 'rgba(255,255,255,0.025)' },
       },
       y: {
         ticks: { color: '#475569', font: { size: 9 } },
-        grid:  { color: 'rgba(255,255,255,0.025)' },
+        grid: { color: 'rgba(255,255,255,0.025)' },
       },
     },
   });
@@ -736,7 +734,7 @@ function renderGreeksCharts(rows) {
           {
             label: 'Put',
             data: rows.map(r => r[d.pK]),
-            borderColor: PUT_C,  backgroundColor: 'rgba(244,63,94,0.06)',
+            borderColor: PUT_C, backgroundColor: 'rgba(244,63,94,0.06)',
             tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2, fill: true,
           },
         ],
@@ -752,9 +750,9 @@ function openGreeksModal(d, rows) {
   if (!modal) return;
 
   const titleEl = $('gm-title');
-  const subEl   = $('gm-sub');
+  const subEl = $('gm-sub');
   if (titleEl) titleEl.textContent = `${d.title} Historical Data`;
-  if (subEl)   subEl.textContent   = `Expiry: ${App.greeksExpiry} | Strike: ${App.greeksStrike}`;
+  if (subEl) subEl.textContent = `Expiry: ${App.greeksExpiry} | Strike: ${App.greeksStrike}`;
 
   const tableWrap = $('gm-table-wrap');
   if (tableWrap) {
@@ -813,7 +811,7 @@ function openGreeksModal(d, rows) {
           {
             label: 'Put',
             data: rows.map(r => r[d.pK]),
-            borderColor: PUT_C,  backgroundColor: 'rgba(244,63,94,0.04)',
+            borderColor: PUT_C, backgroundColor: 'rgba(244,63,94,0.04)',
             tension: 0.3, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2, fill: true,
           },
         ],
@@ -837,18 +835,18 @@ function openGreeksModal(d, rows) {
         scales: {
           x: {
             ticks: { color: '#475569', maxTicksLimit: 8, font: { size: 9 } },
-            grid:  { color: 'rgba(255,255,255,0.025)' },
+            grid: { color: 'rgba(255,255,255,0.025)' },
           },
           y: {
             ticks: { color: '#475569', font: { size: 9 } },
-            grid:  { color: 'rgba(255,255,255,0.025)' },
+            grid: { color: 'rgba(255,255,255,0.025)' },
           },
         },
         // ── Click on Graph → Highlight & Scroll Table ──
         onClick: (event, activeElements) => {
           if (!activeElements || activeElements.length === 0) return;
           const idx = activeElements[0].index;
-          
+
           // Clear previous highlights
           const tbody = tableWrap.querySelector('tbody');
           tbody.querySelectorAll('tr').forEach(tr => tr.classList.remove('row-highlight'));
@@ -900,48 +898,48 @@ function closeGreeksModal(e) {
   if (!modal) return;
   // If clicked, make sure it's the backdrop wrapper or close button click
   if (e && e.target !== modal && !e.target.classList.contains('gm-close')) return;
-  
+
   // Destroy chart to release canvas memory
   if (App.modalChart) {
     App.modalChart.destroy();
     App.modalChart = null;
   }
-  
+
   modal.style.display = 'none';
 }
 
 function renderGreeksChangeTable(rows) {
-  const card    = $('greeks-change-card');
+  const card = $('greeks-change-card');
   const wrapper = $('greeks-table-wrapper');
-  if (!wrapper || !rows.length) { if (card) card.style.display='none'; return; }
+  if (!wrapper || !rows.length) { if (card) card.style.display = 'none'; return; }
 
   if (card) card.style.display = 'block';
 
   const rangeEl = $('greeks-range-label');
   if (rangeEl && rows.length >= 2) {
-    const t1 = rows[0].fetch_time.substring(11,19);
-    const t2 = rows[rows.length-1].fetch_time.substring(11,19);
+    const t1 = rows[0].fetch_time.substring(11, 19);
+    const t2 = rows[rows.length - 1].fetch_time.substring(11, 19);
     rangeEl.textContent = `${t1} → ${t2}`;
   }
 
   const first = rows[0], last = rows[rows.length - 1];
   const greekDefs = [
-    { k:'call_ltp',   label:'Call LTP',   dec:2, side:'call' },
-    { k:'call_iv',    label:'Call IV %',  dec:2, side:'call' },
-    { k:'call_delta', label:'Call Delta', dec:4, side:'call' },
-    { k:'call_gamma', label:'Call Gamma', dec:6, side:'call' },
-    { k:'call_theta', label:'Call Theta', dec:2, side:'call' },
-    { k:'call_vega',  label:'Call Vega',  dec:4, side:'call' },
-    { k:'call_oi',    label:'Call OI',    dec:0, side:'call' },
-    { k:'put_ltp',    label:'Put LTP',    dec:2, side:'put'  },
-    { k:'put_iv',     label:'Put IV %',   dec:2, side:'put'  },
-    { k:'put_delta',  label:'Put Delta',  dec:4, side:'put'  },
-    { k:'put_gamma',  label:'Put Gamma',  dec:6, side:'put'  },
-    { k:'put_theta',  label:'Put Theta',  dec:2, side:'put'  },
-    { k:'put_vega',   label:'Put Vega',   dec:4, side:'put'  },
-    { k:'put_oi',     label:'Put OI',     dec:0, side:'put'  },
-    { k:'spot_price', label:'Spot',       dec:2, side:''     },
-    { k:'pcr',        label:'PCR',        dec:4, side:''     },
+    { k: 'call_ltp', label: 'Call LTP', dec: 2, side: 'call' },
+    { k: 'call_iv', label: 'Call IV %', dec: 2, side: 'call' },
+    { k: 'call_delta', label: 'Call Delta', dec: 4, side: 'call' },
+    { k: 'call_gamma', label: 'Call Gamma', dec: 6, side: 'call' },
+    { k: 'call_theta', label: 'Call Theta', dec: 2, side: 'call' },
+    { k: 'call_vega', label: 'Call Vega', dec: 4, side: 'call' },
+    { k: 'call_oi', label: 'Call OI', dec: 0, side: 'call' },
+    { k: 'put_ltp', label: 'Put LTP', dec: 2, side: 'put' },
+    { k: 'put_iv', label: 'Put IV %', dec: 2, side: 'put' },
+    { k: 'put_delta', label: 'Put Delta', dec: 4, side: 'put' },
+    { k: 'put_gamma', label: 'Put Gamma', dec: 6, side: 'put' },
+    { k: 'put_theta', label: 'Put Theta', dec: 2, side: 'put' },
+    { k: 'put_vega', label: 'Put Vega', dec: 4, side: 'put' },
+    { k: 'put_oi', label: 'Put OI', dec: 0, side: 'put' },
+    { k: 'spot_price', label: 'Spot', dec: 2, side: '' },
+    { k: 'pcr', label: 'PCR', dec: 4, side: '' },
   ];
 
   let html = `<table class="gct">
@@ -961,15 +959,15 @@ function renderGreeksChangeTable(rows) {
     const pct = (f !== 0 && !isNaN(f)) ? (chg / Math.abs(f)) * 100 : null;
     const chgCls = chg > 0 ? 'chg-pos' : chg < 0 ? 'chg-neg' : '';
     const pctStr = pct != null
-      ? `<span class="pct-badge ${pct>=0?'pos':'neg'}">${fmtPct(pct, 2)}</span>`
+      ? `<span class="pct-badge ${pct >= 0 ? 'pos' : 'neg'}">${fmtPct(pct, 2)}</span>`
       : '—';
     const rowCls = gk.side === 'call' ? 'call-row' : gk.side === 'put' ? 'put-row' : '';
 
-    html += `<tr class="${rowCls}" style="${i%2!==0?'background:var(--row-even)':''}">
+    html += `<tr class="${rowCls}" style="${i % 2 !== 0 ? 'background:var(--row-even)' : ''}">
       <td>${gk.label}</td>
-      <td>${isNaN(f)?'—':f.toFixed(gk.dec)}</td>
-      <td>${isNaN(l)?'—':l.toFixed(gk.dec)}</td>
-      <td class="${chgCls}">${isNaN(chg)?'—':(chg>=0?'+':'')+chg.toFixed(gk.dec)}</td>
+      <td>${isNaN(f) ? '—' : f.toFixed(gk.dec)}</td>
+      <td>${isNaN(l) ? '—' : l.toFixed(gk.dec)}</td>
+      <td class="${chgCls}">${isNaN(chg) ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(gk.dec)}</td>
       <td>${pctStr}</td>
     </tr>`;
   });
@@ -986,7 +984,7 @@ function fetchAndRenderFormulas() {
       App.formulas = res.formulas || [];
       renderFormulaList();
     })
-    .catch(() => {});
+    .catch(() => { });
 }
 
 function renderFormulaList() {
@@ -1021,27 +1019,27 @@ function renderFormulaList() {
 function editFormula(id) {
   const f = App.formulas.find(x => x.id === id);
   if (!f) return;
-  $('formula-id').value          = f.id;
-  $('formula-name-input').value  = f.name;
-  $('formula-expr-input').value  = f.expression;
-  $('formula-desc-input').value  = f.description || '';
+  $('formula-id').value = f.id;
+  $('formula-name-input').value = f.name;
+  $('formula-expr-input').value = f.expression;
+  $('formula-desc-input').value = f.description || '';
   $('formula-color-input').value = f.color || '#60a5fa';
   $('formula-form-title').innerHTML = '<span class="ico">✏️</span> Edit Formula';
-  $('formula-form-title').closest('.card-head')?.scrollIntoView({ behavior:'smooth' });
+  $('formula-form-title').closest('.card-head')?.scrollIntoView({ behavior: 'smooth' });
 }
 
 function deleteFormula(id) {
   if (!confirm('Delete this formula?')) return;
-  fetch(`/api/formulas/${id}`, { method:'DELETE' })
+  fetch(`/api/formulas/${id}`, { method: 'DELETE' })
     .then(() => { toast('Formula deleted.', 'ok'); fetchAndRenderFormulas(); })
     .catch(e => toast(`Error: ${e}`, 'err'));
 }
 
 function clearFormulaForm() {
-  $('formula-id').value          = '';
-  $('formula-name-input').value  = '';
-  $('formula-expr-input').value  = '';
-  $('formula-desc-input').value  = '';
+  $('formula-id').value = '';
+  $('formula-name-input').value = '';
+  $('formula-expr-input').value = '';
+  $('formula-desc-input').value = '';
   $('formula-color-input').value = '#60a5fa';
   $('formula-form-title').innerHTML = '<span class="ico">➕</span> New Formula';
   $('formula-validation-msg').innerHTML = '';
@@ -1060,11 +1058,11 @@ function insertVar(v) {
 // Live validation
 $('formula-expr-input')?.addEventListener('input', debounce(async function () {
   const expr = this.value.trim();
-  const el   = $('formula-validation-msg');
+  const el = $('formula-validation-msg');
   if (!expr) { el.innerHTML = ''; return; }
   try {
-    const res  = await fetch('/api/formulas/validate', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+    const res = await fetch('/api/formulas/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ expression: expr }),
     });
     const data = await res.json();
@@ -1075,19 +1073,19 @@ $('formula-expr-input')?.addEventListener('input', debounce(async function () {
 }, 450));
 
 $('formula-save-btn')?.addEventListener('click', async () => {
-  const id   = $('formula-id').value;
+  const id = $('formula-id').value;
   const name = $('formula-name-input').value.trim();
   const expr = $('formula-expr-input').value.trim();
   const desc = $('formula-desc-input').value.trim();
-  const color= $('formula-color-input').value;
+  const color = $('formula-color-input').value;
   if (!name) { toast('Enter a formula name.', 'warn'); return; }
-  if (!expr) { toast('Enter an expression.', 'warn');  return; }
+  if (!expr) { toast('Enter an expression.', 'warn'); return; }
 
   const payload = { name, expression: expr, description: desc, color };
   if (id) payload.id = parseInt(id);
 
-  const res  = await fetch('/api/formulas', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+  const res = await fetch('/api/formulas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   const data = await res.json();
@@ -1107,7 +1105,7 @@ function dtLocalToApi(v) {
 // Convert Date object to datetime-local input value (YYYY-MM-DDTHH:MM)
 function toDatetimeLocal(d) {
   const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** Set quick date-range presets into the From/To datetime-local inputs.
@@ -1118,7 +1116,7 @@ function setHistoryRange(preset) {
 
   if (preset === 'all') {
     $('history-from').value = '';
-    $('history-to').value   = toDatetimeLocal(now);
+    $('history-to').value = toDatetimeLocal(now);
     return;
   }
   if (preset === 'today') {
@@ -1127,7 +1125,7 @@ function setHistoryRange(preset) {
     from = new Date(now.getTime() - preset * 60 * 1000);
   }
   $('history-from').value = toDatetimeLocal(from);
-  $('history-to').value   = toDatetimeLocal(now);
+  $('history-to').value = toDatetimeLocal(now);
 
   // Highlight active chip
   document.querySelectorAll('.preset-chip').forEach(b => b.classList.remove('active'));
@@ -1136,9 +1134,9 @@ function setHistoryRange(preset) {
 
 async function loadHistory() {
   const expiry = $('history-expiry-sel')?.value;
-  const from   = dtLocalToApi($('history-from')?.value);
-  const to     = dtLocalToApi($('history-to')?.value);
-  const limit  = $('history-limit')?.value || 500;
+  const from = dtLocalToApi($('history-from')?.value);
+  const to = dtLocalToApi($('history-to')?.value);
+  const limit = $('history-limit')?.value || 500;
 
   if (!expiry) { toast('Select an expiry date.', 'warn'); return; }
 
@@ -1146,10 +1144,10 @@ async function loadHistory() {
 
   let url = `/api/history?expiry=${expiry}&limit=${limit}`;
   if (from) url += `&from=${encodeURIComponent(from)}`;
-  if (to)   url += `&to=${encodeURIComponent(to)}`;
+  if (to) url += `&to=${encodeURIComponent(to)}`;
 
   try {
-    const res  = await fetch(url);
+    const res = await fetch(url);
     const data = await res.json();
     const rows = data.data || [];
 
@@ -1162,15 +1160,15 @@ async function loadHistory() {
 
 function renderHistoryTable(rows, expiry) {
   // Store for export
-  App.historyRows   = rows;
+  App.historyRows = rows;
   App.historyExpiry = expiry || $('history-expiry-sel')?.value || 'history';
 
   // Enable / disable export buttons
   const hasRows = rows.length > 0;
-  const btnCsv  = $('btn-export-csv');
-  const btnXls  = $('btn-export-excel');
-  if (btnCsv)  btnCsv.disabled  = !hasRows;
-  if (btnXls)  btnXls.disabled  = !hasRows;
+  const btnCsv = $('btn-export-csv');
+  const btnXls = $('btn-export-excel');
+  if (btnCsv) btnCsv.disabled = !hasRows;
+  if (btnXls) btnXls.disabled = !hasRows;
 
   const wrapper = $('history-table-wrapper');
   if (!rows.length) {
@@ -1179,23 +1177,23 @@ function renderHistoryTable(rows, expiry) {
   }
 
   const cols = [
-    { k:'fetch_time',   l:'Time'       },
-    { k:'strike_price', l:'Strike'     },
-    { k:'spot_price',   l:'Spot'       },
-    { k:'call_ltp',     l:'Call LTP'   },
-    { k:'call_oi',      l:'Call OI'    },
-    { k:'call_iv',      l:'Call IV'    },
-    { k:'call_delta',   l:'Call Δ'     },
-    { k:'call_theta',   l:'Call Θ'     },
-    { k:'call_vega',    l:'Call V'     },
-    { k:'put_ltp',      l:'Put LTP'    },
-    { k:'put_oi',       l:'Put OI'     },
-    { k:'put_iv',       l:'Put IV'     },
-    { k:'put_delta',    l:'Put Δ'      },
-    { k:'put_theta',    l:'Put Θ'      },
-    { k:'put_vega',     l:'Put V'      },
-    { k:'pcr',          l:'PCR'        },
-    { k:'is_atm',       l:'ATM'        },
+    { k: 'fetch_time', l: 'Time' },
+    { k: 'strike_price', l: 'Strike' },
+    { k: 'spot_price', l: 'Spot' },
+    { k: 'call_ltp', l: 'Call LTP' },
+    { k: 'call_oi', l: 'Call OI' },
+    { k: 'call_iv', l: 'Call IV' },
+    { k: 'call_delta', l: 'Call Δ' },
+    { k: 'call_theta', l: 'Call Θ' },
+    { k: 'call_vega', l: 'Call V' },
+    { k: 'put_ltp', l: 'Put LTP' },
+    { k: 'put_oi', l: 'Put OI' },
+    { k: 'put_iv', l: 'Put IV' },
+    { k: 'put_delta', l: 'Put Δ' },
+    { k: 'put_theta', l: 'Put Θ' },
+    { k: 'put_vega', l: 'Put V' },
+    { k: 'pcr', l: 'PCR' },
+    { k: 'is_atm', l: 'ATM' },
   ];
 
   let html = `<div class="oc-scroll"><table class="oc-table" style="min-width:1400px">
@@ -1211,11 +1209,11 @@ function renderHistoryTable(rows, expiry) {
     html += `<tr class="${cls}">`;
     cols.forEach(c => {
       const v = row[c.k];
-      if (c.k === 'is_atm')    html += `<td class="text-center">${v ? '★' : ''}</td>`;
-      else if (c.k === 'fetch_time') html += `<td class="font-mono" style="font-size:0.65rem;white-space:nowrap">${v||'—'}</td>`;
+      if (c.k === 'is_atm') html += `<td class="text-center">${v ? '★' : ''}</td>`;
+      else if (c.k === 'fetch_time') html += `<td class="font-mono" style="font-size:0.65rem;white-space:nowrap">${v || '—'}</td>`;
       else {
         const n = parseFloat(v);
-        html += `<td class="text-right">${isNaN(n) ? (v||'—') : n.toLocaleString('en-IN', {maximumFractionDigits:4})}</td>`;
+        html += `<td class="text-right">${isNaN(n) ? (v || '—') : n.toLocaleString('en-IN', { maximumFractionDigits: 4 })}</td>`;
       }
     });
     html += '</tr>';
@@ -1227,15 +1225,15 @@ function renderHistoryTable(rows, expiry) {
 
 // ── Export helpers ────────────────────────────────────────
 const EXPORT_COLS = [
-  'fetch_time','strike_price','spot_price',
-  'call_ltp','call_oi','call_iv','call_delta','call_gamma','call_theta','call_vega',
-  'put_ltp','put_oi','put_iv','put_delta','put_gamma','put_theta','put_vega',
-  'pcr','is_atm',
+  'fetch_time', 'strike_price', 'spot_price',
+  'call_ltp', 'call_oi', 'call_iv', 'call_delta', 'call_gamma', 'call_theta', 'call_vega',
+  'put_ltp', 'put_oi', 'put_iv', 'put_delta', 'put_gamma', 'put_theta', 'put_vega',
+  'pcr', 'is_atm',
 ];
 
 function _rowsToDelimited(rows, sep) {
   const header = EXPORT_COLS.join(sep);
-  const lines  = rows.map(r =>
+  const lines = rows.map(r =>
     EXPORT_COLS.map(k => {
       const v = r[k];
       if (v === null || v === undefined) return '';
@@ -1251,9 +1249,9 @@ function _rowsToDelimited(rows, sep) {
 
 function _triggerDownload(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
@@ -1262,7 +1260,7 @@ function _triggerDownload(content, filename, mimeType) {
 
 function exportHistoryCSV() {
   if (!App.historyRows?.length) { toast('Load data first.', 'warn'); return; }
-  const ts  = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   const csv = _rowsToDelimited(App.historyRows, ',');
   _triggerDownload('\uFEFF' + csv,   // BOM for Excel UTF-8 recognition
     `option_chain_${App.historyExpiry}_${ts}.csv`, 'text/csv;charset=utf-8');
@@ -1271,7 +1269,7 @@ function exportHistoryCSV() {
 
 function exportHistoryExcel() {
   if (!App.historyRows?.length) { toast('Load data first.', 'warn'); return; }
-  const ts  = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   const tsv = _rowsToDelimited(App.historyRows, '\t');
   _triggerDownload(tsv,
     `option_chain_${App.historyExpiry}_${ts}.xls`, 'application/vnd.ms-excel;charset=utf-8');
@@ -1284,17 +1282,17 @@ async function loadConfig() {
     const res = await fetch('/api/config');
     const cfg = await res.json();
 
-    if ($('cfg-strikes'))     { $('cfg-strikes').value = cfg.strikes_around_atm || 20; }
+    if ($('cfg-strikes')) { $('cfg-strikes').value = cfg.strikes_around_atm || 20; }
     if ($('cfg-strikes-val')) { $('cfg-strikes-val').textContent = cfg.strikes_around_atm || 20; }
-    if ($('cfg-refresh'))     { $('cfg-refresh').value = cfg.refresh_interval || 5; }
-    if ($('cfg-client-id'))   { $('cfg-client-id').value = cfg.client_id || ''; }
-    if ($('cfg-redirect-uri')){ $('cfg-redirect-uri').value = cfg.redirect_uri || ''; }
+    if ($('cfg-refresh')) { $('cfg-refresh').value = cfg.refresh_interval || 5; }
+    if ($('cfg-client-id')) { $('cfg-client-id').value = cfg.client_id || ''; }
+    if ($('cfg-redirect-uri')) { $('cfg-redirect-uri').value = cfg.redirect_uri || ''; }
 
     // Underlying dropdown
     const sel = $('cfg-underlying');
     if (sel && cfg.underlyings) {
       sel.innerHTML = Object.entries(cfg.underlyings)
-        .map(([label, val]) => `<option value="${val}" ${val===cfg.underlying?'selected':''}>${label}</option>`)
+        .map(([label, val]) => `<option value="${val}" ${val === cfg.underlying ? 'selected' : ''}>${label}</option>`)
         .join('');
     } else if (sel && cfg.underlying) {
       [...sel.options].forEach(o => { o.selected = o.value === cfg.underlying; });
@@ -1305,11 +1303,11 @@ async function loadConfig() {
 }
 
 async function openAuthUrl() {
-  const res  = await fetch('/api/auth/url');
+  const res = await fetch('/api/auth/url');
   const data = await res.json();
   const section = $('auth-code-section');
-  const note    = $('auth-redirect-note');
-  if (note)    note.innerHTML = `After logging in you'll be redirected to:<br><code>${data.redirect_uri}</code><br>Copy the <code>?code=XXXXX</code> value and paste below:`;
+  const note = $('auth-redirect-note');
+  if (note) note.innerHTML = `After logging in you'll be redirected to:<br><code>${data.redirect_uri}</code><br>Copy the <code>?code=XXXXX</code> value and paste below:`;
   if (section) section.style.display = 'block';
   window.open(data.url, '_blank');
 }
@@ -1317,8 +1315,8 @@ async function openAuthUrl() {
 async function submitAuthCode() {
   const code = $('auth-code-input')?.value.trim();
   if (!code) { toast('Paste the authorization code.', 'warn'); return; }
-  const res  = await fetch('/api/auth/token', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+  const res = await fetch('/api/auth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
   const data = await res.json();
@@ -1332,8 +1330,8 @@ async function submitAuthCode() {
 async function submitManualToken() {
   const token = $('manual-token-input')?.value.trim();
   if (!token) { toast('Paste the access token.', 'warn'); return; }
-  const res  = await fetch('/api/auth/manual_token', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+  const res = await fetch('/api/auth/manual_token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   });
   const data = await res.json();
@@ -1349,30 +1347,30 @@ async function saveConfig() {
   if (fsVal) applyChainFontSize(fsVal);
 
   const payload = {
-    underlying:         $('cfg-underlying')?.value,
+    underlying: $('cfg-underlying')?.value,
     strikes_around_atm: parseInt($('cfg-strikes')?.value || 20),
-    refresh_interval:   parseInt($('cfg-refresh')?.value || 5),
-    client_id:          $('cfg-client-id')?.value,
-    redirect_uri:       $('cfg-redirect-uri')?.value,
+    refresh_interval: parseInt($('cfg-refresh')?.value || 5),
+    client_id: $('cfg-client-id')?.value,
+    redirect_uri: $('cfg-redirect-uri')?.value,
   };
   const secret = $('cfg-client-secret')?.value;
   if (secret) payload.client_secret = secret;
 
-  const res  = await fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+  const res = await fetch('/api/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   const data = await res.json();
-  toast(data.success ? 'Configuration saved!' : 'Failed to save.', data.success?'ok':'err');
+  toast(data.success ? 'Configuration saved!' : 'Failed to save.', data.success ? 'ok' : 'err');
 }
 
 // ── Stream Control ────────────────────────────────────────
 async function startStream() {
-  await fetch('/api/streaming/start', { method:'POST' });
+  await fetch('/api/streaming/start', { method: 'POST' });
   toast('Streaming started.', 'ok');
 }
 async function stopStream() {
-  await fetch('/api/streaming/stop', { method:'POST' });
+  await fetch('/api/streaming/stop', { method: 'POST' });
   toast('Streaming paused.', 'info');
 }
 
@@ -1414,9 +1412,9 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchAndRenderFormulas();
 
   // Default date range for history (datetime-local format: YYYY-MM-DDTHH:MM)
-  const now  = new Date();
+  const now = new Date();
   const from = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-  if ($('history-to'))   $('history-to').value   = toDatetimeLocal(now);
+  if ($('history-to')) $('history-to').value = toDatetimeLocal(now);
   if ($('history-from')) $('history-from').value = toDatetimeLocal(from);
 });
 

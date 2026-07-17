@@ -439,7 +439,11 @@ body {
 /* ═══════════════════════════════════════════════════
    OPTION CHAIN TABLE
 ═══════════════════════════════════════════════════ */
-.oc-scroll { overflow-x: auto; }
+.oc-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+}
 
 .oc-table {
   width: 100%; border-collapse: collapse;
@@ -455,24 +459,27 @@ body {
   letter-spacing: 0.08em; text-transform: uppercase;
   text-align: center;
   border-bottom: none;
+  position: sticky;
+  top: 0;
+  z-index: 6;
 }
 .oc-table thead tr.group-row .gh-call {
-  background: rgba(16,185,129,0.12);
+  background: linear-gradient(rgba(16,185,129,0.12), rgba(16,185,129,0.12)), var(--bg-card);
   color: var(--call);
   border-top: 2px solid var(--call);
 }
 .oc-table thead tr.group-row .gh-strike {
-  background: rgba(245,158,11,0.1);
+  background: linear-gradient(rgba(245,158,11,0.1), rgba(245,158,11,0.1)), var(--bg-card);
   color: var(--atm);
   border-top: 2px solid var(--atm);
 }
 .oc-table thead tr.group-row .gh-put {
-  background: rgba(244,63,94,0.12);
+  background: linear-gradient(rgba(244,63,94,0.12), rgba(244,63,94,0.12)), var(--bg-card);
   color: var(--put);
   border-top: 2px solid var(--put);
 }
 .oc-table thead tr.group-row .gh-formula {
-  background: rgba(99,102,241,0.1);
+  background: linear-gradient(rgba(99,102,241,0.1), rgba(99,102,241,0.1)), var(--bg-card);
   color: var(--accent-light);
   border-top: 2px solid var(--accent);
 }
@@ -484,12 +491,14 @@ body {
   letter-spacing: 0.04em; text-transform: uppercase;
   text-align: right; white-space: nowrap;
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 5;
+  position: sticky;
+  top: 22px;
+  z-index: 5;
   cursor: help;
 }
-.oc-table thead tr.col-row .ch-call   { background: rgba(16,185,129,0.06); color: #6ee7b7; }
-.oc-table thead tr.col-row .ch-strike { background: rgba(245,158,11,0.08);  color: #fcd34d; text-align: center; }
-.oc-table thead tr.col-row .ch-put    { background: rgba(244,63,94,0.06);   color: #fca5a5; }
+.oc-table thead tr.col-row .ch-call   { background: linear-gradient(rgba(16,185,129,0.06), rgba(16,185,129,0.06)), var(--bg-card); color: #6ee7b7; }
+.oc-table thead tr.col-row .ch-strike { background: linear-gradient(rgba(245,158,11,0.08), rgba(245,158,11,0.08)), var(--bg-card);  color: #fcd34d; text-align: center; }
+.oc-table thead tr.col-row .ch-put    { background: linear-gradient(rgba(244,63,94,0.06), rgba(244,63,94,0.06)), var(--bg-card);   color: #fca5a5; }
 
 /* body rows */
 .oc-table tbody tr {
