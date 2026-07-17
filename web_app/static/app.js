@@ -1411,6 +1411,20 @@ window.addEventListener('DOMContentLoaded', () => {
   loadConfig();
   fetchAndRenderFormulas();
 
+  // Nested scroll propagation for .oc-scroll to prevent scroll-lock
+  const ocScroll = document.querySelector('.oc-scroll');
+  const mainEl = document.querySelector('.main');
+  if (ocScroll && mainEl) {
+    ocScroll.addEventListener('wheel', (e) => {
+      const { scrollTop, scrollHeight, clientHeight } = ocScroll;
+      const delta = e.deltaY;
+      if ((delta > 0 && scrollTop + clientHeight >= scrollHeight - 1) || 
+          (delta < 0 && scrollTop <= 1)) {
+        mainEl.scrollTop += delta;
+      }
+    }, { passive: true });
+  }
+
   // Default date range for history (datetime-local format: YYYY-MM-DDTHH:MM)
   const now = new Date();
   const from = new Date(now.getTime() - 3 * 60 * 60 * 1000);
