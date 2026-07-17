@@ -515,16 +515,22 @@ body {
 .oc-table td.strike-td {
   text-align: center; font-weight: 700;
   color: #e2e8f0;
-  background: rgba(245,158,11,0.06);
-  border-left: 1px solid rgba(245,158,11,0.15);
-  border-right: 1px solid rgba(245,158,11,0.15);
+  background: rgba(245,158,11,0.12);
+  border-left: 1px solid rgba(245,158,11,0.2);
+  border-right: 1px solid rgba(245,158,11,0.2);
 }
 .oc-table td.call-side { background: rgba(16,185,129,0.02); }
 .oc-table td.put-side  { background: rgba(244,63,94,0.02);  }
 
 /* ITM Highlights (Sensibull soft yellow/amber background on ITM sides only) */
-.oc-table td.call-side.itm-call { background: rgba(245, 158, 11, 0.05) !important; }
-.oc-table td.put-side.itm-put   { background: rgba(245, 158, 11, 0.05) !important; }
+.oc-table td.call-side.itm-call {
+  background: rgba(245, 158, 11, 0.065) !important;
+  color: #ffffff; /* Bright white for high visibility of ITM values */
+}
+.oc-table td.put-side.itm-put {
+  background: rgba(245, 158, 11, 0.065) !important;
+  color: #ffffff; /* Bright white for high visibility of ITM values */
+}
 
 /* row states */
 .oc-table tbody tr.row-atm      { background: var(--row-atm); }
