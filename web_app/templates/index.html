@@ -42,6 +42,15 @@
 
     <div id="spot-ticker" class="spot-ticker">₹ —</div>
 
+    <div class="h-sep"></div>
+
+    <!-- India VIX -->
+    <div class="h-instrument">
+      <span>India VIX:</span>
+      <strong id="h-india-vix" class="font-mono" style="color: var(--accent-color, #38bdf8); font-size: 0.95rem;">—</strong>
+      <span id="h-india-vix-chg" class="font-mono" style="font-size: 0.8rem; font-weight: 600; margin-left: 3px;"></span>
+    </div>
+
     <div class="h-flex"></div>
 
     <!-- Last fetch info -->
@@ -134,16 +143,6 @@
           <div class="kpi-label">Put-Call Ratio</div>
           <div class="kpi-value font-mono" id="kpi-pcr">—</div>
           <div id="kpi-pcr-badge" class="kpi-badge neut">Neutral</div>
-        </div>
-        <div class="kpi call-kpi">
-          <div class="kpi-label">ATM Call IV</div>
-          <div class="kpi-value call-color font-mono" id="kpi-call-iv">—</div>
-          <div class="kpi-sub">Implied Volatility</div>
-        </div>
-        <div class="kpi put-kpi">
-          <div class="kpi-label">ATM Put IV</div>
-          <div class="kpi-value put-color font-mono" id="kpi-put-iv">—</div>
-          <div class="kpi-sub">Implied Volatility</div>
         </div>
         <div class="kpi call-kpi">
           <div class="kpi-label">Total Call OI</div>

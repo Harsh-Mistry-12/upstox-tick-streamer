@@ -80,7 +80,11 @@ class AppState:
         self.fetch_count: int = 0
         self.underlying: str = "NSE_INDEX|Nifty 50"
         self.strikes_around_atm: int = 20
-        self.refresh_interval: int = 5       # seconds
+        self.refresh_interval: int = 5       # seconds (streaming interval)
+        self.db_save_interval: int = 300     # seconds (5 minutes DB storage interval)
+        self.last_db_save_time: float = 0.0  # timestamp of last DB save
+        self.db_save_count: int = 0         # count of 5-min DB saves
+        self.india_vix: float | None = None  # live India VIX value
         self._lock = threading.Lock()
 
 
@@ -206,12 +210,60 @@ def _fetch_single_expiry(expiry: str) -> dict | None:
         return None
 
 
+def is_market_open(dt: datetime.datetime | None = None) -> bool:
+    """
+    Checks if Indian equity/options market is currently open.
+    Regular trading hours: Monday - Friday, 09:15 to 15:30 IST.
+    """
+    if dt is None:
+        dt = datetime.datetime.now()
+    if dt.weekday() >= 5:  # Saturday or Sunday
+        return False
+    current_time = dt.time()
+    market_start = datetime.time(9, 15)
+    market_end = datetime.time(15, 30)
+    return market_start <= current_time <= market_end
+
+
+def _calculate_duration_tag(save_count: int) -> str:
+    """
+    Calculates duration tag based on 5-minute interval milestones.
+    Base interval: 5m (for every 5-min snapshot stored in DB).
+    Milestones:
+      - 12 x 5m   = 1 hr   (1h)
+      - 24 x 5m   = 2 hr   (2h)
+      - 36 x 5m   = 3 hr   (3h)
+      - 48 x 5m   = 4 hr   (4h)
+      - 288 x 5m  = 1 day  (1d)
+      - 2016 x 5m = 1 week (1w)
+      - 8640 x 5m = 1 month (1month)
+    """
+    tags = ["5m"]
+    if save_count > 0:
+        if save_count % 12 == 0:
+            tags.append("1h")
+        if save_count % 24 == 0:
+            tags.append("2h")
+        if save_count % 36 == 0:
+            tags.append("3h")
+        if save_count % 48 == 0:
+            tags.append("4h")
+        if save_count % 288 == 0:
+            tags.append("1d")
+        if save_count % 2016 == 0:
+            tags.append("1w")
+        if save_count % 8640 == 0:
+            tags.append("1month")
+    return ", ".join(tags)
+
+
 def background_fetch():
     """
     Runs forever in a daemon thread.
     Only fetches the CURRENT expiry (index 0) and NEXT expiry (index 1)
     concurrently every `state.refresh_interval` seconds.
     All other expiries are served on-demand via /api/fetch_expiry.
+    Data is pushed live via WebSocket every tick, but persisted to DB every 5 minutes.
     """
     log.info("Background fetch thread started (current + next expiry only).")
     while True:
@@ -263,11 +315,22 @@ def background_fetch():
 
             results.sort(key=lambda r: r["expiry"])
 
-            # ── save to MySQL ─────────────────────────────────────────────
-            all_db_rows: list[dict] = []
-            for r in results:
-                all_db_rows.extend(r["db_rows"])
-            db.save_snapshots(all_db_rows)
+            # ── save to MySQL (every 5 minutes / 300 seconds, ONLY during market hours) ────────────
+            now = time.time()
+            if is_market_open():
+                if state.last_db_save_time == 0 or (now - state.last_db_save_time >= state.db_save_interval):
+                    state.db_save_count += 1
+                    duration_tag = _calculate_duration_tag(state.db_save_count)
+                    all_db_rows: list[dict] = []
+                    for r in results:
+                        for row in r["db_rows"]:
+                            row["duration"] = duration_tag
+                            all_db_rows.append(row)
+                    db.save_snapshots(all_db_rows)
+                    state.last_db_save_time = now
+                    log.info("Saved %d snapshot rows to DB (duration: '%s', save #%d).", len(all_db_rows), duration_tag, state.db_save_count)
+            else:
+                log.debug("Market is closed (outside 09:15-15:30 IST / weekend). Skipping DB snapshot save.")
 
             # ── update in-memory cache ────────────────────────────────────
             with state._lock:
@@ -357,7 +420,22 @@ def api_status():
         "underlying":   state.underlying,
         "last_error":   state.last_error,
         "refresh_interval": state.refresh_interval,
+        "india_vix":    state.india_vix,
     })
+
+
+@app.route("/api/vix")
+def api_vix():
+    """Separate endpoint to fetch live India VIX details directly."""
+    token = db.get_config("access_token", "")
+    if token:
+        upstox_api.set_token(token)
+    details = upstox_api.fetch_india_vix_details()
+    if details:
+        with state._lock:
+            state.india_vix = details.get("last_price")
+        return jsonify(details)
+    return jsonify({"last_price": state.india_vix, "change": 0.0, "p_change": 0.0})
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────
@@ -491,8 +569,13 @@ def api_fetch_expiry():
     if result is None:
         return jsonify({"error": f"Failed to fetch expiry {expiry}"}), 500
 
-    # Persist to DB
-    db.save_snapshots(result["db_rows"])
+    # Persist to DB if market is open
+    if is_market_open():
+        for r in result["db_rows"]:
+            r["duration"] = "5m"
+        db.save_snapshots(result["db_rows"])
+    else:
+        log.info("Market is closed. Skipping on-demand DB snapshot save for %s.", expiry)
 
     # Update in-memory cache
     with state._lock:

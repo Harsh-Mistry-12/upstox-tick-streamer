@@ -116,6 +116,50 @@ socket.on('connect', () => {
 });
 socket.on('disconnect', () => updateBadge('disconnected'));
 
+function updateIndiaVix(data) {
+  const elVal = $('h-india-vix');
+  const elChg = $('h-india-vix-chg');
+  if (!elVal) return;
+
+  if (data && typeof data === 'object' && data.last_price) {
+    elVal.textContent = fmt(data.last_price, 2);
+    if (elChg && data.change !== undefined && data.p_change !== undefined) {
+      const isUp = data.change >= 0;
+      const sign = isUp ? '+' : '';
+      const color = isUp ? 'var(--up-color, #22c55e)' : 'var(--down-color, #ef4444)';
+      elChg.textContent = `${sign}${fmt(data.change, 2)} (${sign}${fmt(data.p_change, 2)}%)`;
+      elChg.style.color = color;
+    }
+  } else if (typeof data === 'number' && data > 0) {
+    elVal.textContent = fmt(data, 2);
+    if (elChg) elChg.textContent = '';
+  } else {
+    elVal.textContent = '—';
+    if (elChg) elChg.textContent = '';
+  }
+}
+
+let _vixInterval = null;
+
+async function pollIndiaVix() {
+  try {
+    const res = await fetch('/api/vix');
+    if (res.ok) {
+      const data = await res.json();
+      updateIndiaVix(data);
+    }
+  } catch (err) {
+    console.warn('India VIX fetch error:', err);
+  }
+}
+
+function startVixPolling() {
+  if (_vixInterval) clearInterval(_vixInterval);
+  pollIndiaVix();
+  const intervalSec = App.refreshInterval || 5;
+  _vixInterval = setInterval(pollIndiaVix, Math.max(3, intervalSec) * 1000);
+}
+
 socket.on('status_update', d => {
   App.streaming = d.streaming;
   App.tokenValid = d.token_valid;
@@ -244,8 +288,6 @@ function updateKPIs() {
   setText('kpi-spot', spot ? fmt(spot, 2) : '—');
   setText('kpi-atm', atm ? fmt(atm.strike_price, 0) : '—');
   setText('kpi-pcr', pcr ? parseFloat(pcr).toFixed(3) : '—');
-  setText('kpi-call-iv', atm?.call_iv ? fmt(atm.call_iv, 2) + '%' : '—');
-  setText('kpi-put-iv', atm?.put_iv ? fmt(atm.put_iv, 2) + '%' : '—');
   setText('kpi-call-oi', fmtInt(callOI));
   setText('kpi-put-oi', fmtInt(putOI));
 
@@ -1410,6 +1452,7 @@ window.addEventListener('DOMContentLoaded', () => {
   navigate('live');
   loadConfig();
   fetchAndRenderFormulas();
+  startVixPolling();
 
   // Nested scroll propagation for .oc-scroll to prevent scroll-lock
   const ocScroll = document.querySelector('.oc-scroll');

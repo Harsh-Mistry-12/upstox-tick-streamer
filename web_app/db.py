@@ -121,6 +121,7 @@ def init_db():
             -- meta
             is_atm        TINYINT(1)      DEFAULT 0,
             pcr           DECIMAL(10,4),
+            duration      VARCHAR(100)    DEFAULT '5m',
             created_at    TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_exp_fetch  (expiry, fetch_time),
             INDEX idx_underlying (underlying),
@@ -128,6 +129,14 @@ def init_db():
             INDEX idx_strike     (strike_price)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
+
+    # Ensure duration column exists on existing table
+    try:
+        cur.execute("SHOW COLUMNS FROM option_chain_snapshots LIKE 'duration'")
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE option_chain_snapshots ADD COLUMN duration VARCHAR(100) DEFAULT '5m'")
+    except Exception as e:
+        log.warning("Migration check for duration column: %s", e)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS formulas (
@@ -212,7 +221,7 @@ _INSERT_SQL = """
         call_ltp, call_iv, call_delta, call_gamma, call_theta, call_vega, call_pop,
         put_volume, put_oi, put_prev_oi, put_chg_oi,
         put_ltp, put_iv, put_delta, put_gamma, put_theta, put_vega, put_pop,
-        is_atm, pcr
+        is_atm, pcr, duration
     ) VALUES (
         %(fetch_time)s, %(record_time)s, %(expiry)s, %(underlying)s,
         %(spot_price)s, %(strike_price)s,
@@ -222,7 +231,7 @@ _INSERT_SQL = """
         %(put_volume)s, %(put_oi)s, %(put_prev_oi)s, %(put_chg_oi)s,
         %(put_ltp)s, %(put_iv)s, %(put_delta)s, %(put_gamma)s,
         %(put_theta)s, %(put_vega)s, %(put_pop)s,
-        %(is_atm)s, %(pcr)s
+        %(is_atm)s, %(pcr)s, %(duration)s
     )
 """
 
@@ -230,6 +239,9 @@ _INSERT_SQL = """
 def save_snapshots(rows: list[dict]):
     if not rows:
         return
+    for r in rows:
+        if "duration" not in r:
+            r["duration"] = "5m"
     try:
         conn = get_conn()
         cur = conn.cursor()

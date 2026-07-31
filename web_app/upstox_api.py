@@ -69,6 +69,74 @@ def fetch_option_chain(instrument_key: str, expiry_date: str):
     return body.get("data", []), r.headers.get("Date", "")
 
 
+def fetch_india_vix_details() -> dict | None:
+    """Fetch live India VIX details including last_price, change, and percentage_change."""
+    url = f"{BASE_URL}/market-quote/quotes"
+    for key in ("NSE_INDEX|India VIX", "NSE_INDEX|INDIA VIX"):
+        try:
+            r = requests.get(
+                url,
+                headers=_headers(),
+                params={"instrument_key": key},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json().get("data", {})
+                for item in data.values():
+                    if isinstance(item, dict) and "last_price" in item and item["last_price"] is not None:
+                        last_price = float(item["last_price"])
+                        net_change = item.get("net_change")
+                        ohlc_close = item.get("ohlc", {}).get("close")
+
+                        change = float(net_change) if net_change is not None else 0.0
+
+                        # Calculate previous close & percentage change
+                        if net_change is not None:
+                            prev_close = last_price - change
+                        elif ohlc_close:
+                            prev_close = float(ohlc_close)
+                            change = last_price - prev_close
+                        else:
+                            prev_close = 0.0
+
+                        p_change = (change / prev_close * 100.0) if prev_close != 0 else 0.0
+
+                        return {
+                            "last_price": round(last_price, 2),
+                            "change": round(change, 2),
+                            "p_change": round(p_change, 2),
+                        }
+        except Exception as e:
+            log.warning("fetch_india_vix_details(%s) error: %s", key, e)
+
+    # Fallback to LTP endpoint if quotes endpoint fails
+    vix_ltp = fetch_india_vix()
+    if vix_ltp is not None:
+        return {"last_price": round(vix_ltp, 2), "change": 0.0, "p_change": 0.0}
+    return None
+
+
+def fetch_india_vix() -> float | None:
+    """Fetch live India VIX LTP from Upstox API."""
+    url = f"{BASE_URL}/market-quote/ltp"
+    for key in ("NSE_INDEX|India VIX", "NSE_INDEX|INDIA VIX"):
+        try:
+            r = requests.get(
+                url,
+                headers=_headers(),
+                params={"instrument_key": key},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json().get("data", {})
+                for item in data.values():
+                    if isinstance(item, dict) and "last_price" in item and item["last_price"] is not None:
+                        return float(item["last_price"])
+        except Exception as e:
+            log.warning("fetch_india_vix(%s) error: %s", key, e)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Data helpers
 # ---------------------------------------------------------------------------
