@@ -637,11 +637,19 @@ def api_history():
     expiry = request.args.get("expiry", "")
     from_dt = request.args.get("from")
     to_dt = request.args.get("to")
-    limit = int(request.args.get("limit", 2000))
+    duration = request.args.get("duration")
+    raw_limit = request.args.get("snapshots_limit") or request.args.get("limit") or 20
+    snapshots_limit = int(raw_limit)
     if not expiry:
         return jsonify({"error": "expiry required"}), 400
-    rows = db.get_history(underlying, expiry, from_dt, to_dt, limit)
-    return jsonify({"data": rows, "count": len(rows)})
+    rows = db.get_history(underlying, expiry, from_dt, to_dt, duration, snapshots_limit)
+    unique_snapshots = len(set(r["fetch_time"] for r in rows)) if rows else 0
+    return jsonify({
+        "data": rows,
+        "count": len(rows),
+        "snapshots_count": unique_snapshots,
+        "expiry": expiry
+    })
 
 
 @app.route("/api/greeks/history")
@@ -732,12 +740,16 @@ def api_update_config():
         db.set_config("underlying", body["underlying"])
 
     if "strikes_around_atm" in body:
+        val = max(0, int(body["strikes_around_atm"]))
         with state._lock:
-            state.strikes_around_atm = max(1, int(body["strikes_around_atm"]))
+            state.strikes_around_atm = val
+        db.set_config("strikes_around_atm", val)
 
     if "refresh_interval" in body:
+        val = max(3, int(body["refresh_interval"]))
         with state._lock:
-            state.refresh_interval = max(3, int(body["refresh_interval"]))
+            state.refresh_interval = val
+        db.set_config("refresh_interval", val)
 
     for key in ("client_id", "client_secret", "redirect_uri"):
         if key in body:
@@ -870,10 +882,24 @@ def _bootstrap():
         if not db.get_config(key) and val:
             db.set_config(key, val)
 
-    # Restore saved underlying
+    # Restore saved configurations
     saved_underlying = db.get_config("underlying")
     if saved_underlying:
         state.underlying = saved_underlying
+
+    saved_strikes = db.get_config("strikes_around_atm")
+    if saved_strikes is not None:
+        try:
+            state.strikes_around_atm = int(saved_strikes)
+        except ValueError:
+            pass
+
+    saved_interval = db.get_config("refresh_interval")
+    if saved_interval is not None:
+        try:
+            state.refresh_interval = int(saved_interval)
+        except ValueError:
+            pass
 
     # Pre-load latest data from MySQL database history
     try:

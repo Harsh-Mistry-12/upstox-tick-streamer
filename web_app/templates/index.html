@@ -467,27 +467,43 @@
           </div>
         </div>
         <div class="history-filters">
-          <div class="form-group" style="flex:0 0 160px">
+          <div class="form-group" style="flex:0 0 150px">
             <label class="form-label">Expiry</label>
             <select id="history-expiry-sel">
               <option value="">— select —</option>
             </select>
           </div>
-          <div class="form-group" style="flex:1 1 180px">
+          <div class="form-group" style="flex:0 0 130px">
+            <label class="form-label">Duration Tag</label>
+            <select id="history-duration">
+              <option value="all">All (5m, 1h, etc.)</option>
+              <option value="5m">5m</option>
+              <option value="1h">1h</option>
+              <option value="2h">2h</option>
+              <option value="3h">3h</option>
+              <option value="4h">4h</option>
+              <option value="1d">1d</option>
+              <option value="1w">1w</option>
+              <option value="1month">1month</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 160px">
             <label class="form-label">From</label>
             <input type="datetime-local" id="history-from" />
           </div>
-          <div class="form-group" style="flex:1 1 180px">
+          <div class="form-group" style="flex:1 1 160px">
             <label class="form-label">To</label>
             <input type="datetime-local" id="history-to" />
           </div>
-          <div class="form-group" style="flex:0 0 110px">
-            <label class="form-label">Max Rows</label>
+          <div class="form-group" style="flex:0 0 150px">
+            <label class="form-label">Snapshots Limit</label>
             <select id="history-limit">
-              <option value="200">200</option>
-              <option value="500" selected>500</option>
-              <option value="1000">1000</option>
-              <option value="2000">2000</option>
+              <option value="5">5 Snapshots</option>
+              <option value="10">10 Snapshots</option>
+              <option value="20" selected>20 Snapshots</option>
+              <option value="50">50 Snapshots</option>
+              <option value="100">100 Snapshots</option>
+              <option value="0">All Snapshots</option>
             </select>
           </div>
           <div class="form-group shrink">
@@ -548,23 +564,23 @@
                     <div class="auth-note" id="auth-redirect-note"></div>
                     <div class="flex gap-2 mt-2">
                       <input type="text" id="auth-code-input" placeholder="Paste auth code here…" />
-                      <button class="btn btn-success btn-sm" onclick="submitAuthCode()">✔ Exchange</button>
+                      <button class="btn btn-success btn-sm" onclick="submitAuthCode()">Submit Code</button>
                     </div>
                   </div>
                 </div>
               </div>
 
               <!-- Manual token -->
-              <div class="auth-option">
+              <div class="auth-option" style="margin-top:10px">
                 <div class="auth-option-header">
                   <div class="auth-num">B</div>
-                  <div class="auth-option-title">Paste Access Token</div>
+                  <div class="auth-option-title">Paste Access Token Directly</div>
                 </div>
                 <div class="auth-option-body">
-                  <div class="auth-note">If you already have a valid <code>access_token</code> (from Upstox developer console), paste it directly.</div>
-                  <div class="flex gap-2">
-                    <input type="password" id="manual-token-input" placeholder="eyJhbGci…" style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;flex:1" />
-                    <button class="btn btn-primary btn-sm" onclick="submitManualToken()">💾 Save</button>
+                  <div class="auth-note">Already have a token? Paste it directly to start streaming immediately.</div>
+                  <div class="flex gap-2 mt-2">
+                    <input type="text" id="manual-token-input" placeholder="Paste access token string…" />
+                    <button class="btn btn-secondary btn-sm" onclick="submitManualToken()">Save Token</button>
                   </div>
                 </div>
               </div>
@@ -575,7 +591,7 @@
         <!-- Stream Config -->
         <div class="card">
           <div class="card-head">
-            <span class="card-title"><span class="ico">⚙️</span> Stream Configuration</span>
+            <span class="card-title"><span class="ico">⚙️</span> Configuration</span>
           </div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
             <div class="form-group">
@@ -590,15 +606,15 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">Strikes around ATM: <strong id="cfg-strikes-val">20</strong> each side</label>
-              <input type="range" id="cfg-strikes" min="5" max="50" value="20" data-display="cfg-strikes-val" />
-              <div class="form-hint">Shows 40 strikes total (20 above + 20 below ATM)</div>
+              <label class="form-label">Strikes around ATM: <strong id="cfg-strikes-val">20</strong> each side (0 = All Strikes)</label>
+              <input type="range" id="cfg-strikes" min="0" max="50" value="20" data-display="cfg-strikes-val" />
+              <div class="form-hint">Shows 40 strikes total (20 above + 20 below ATM). Set to 0 to capture ALL strikes in full option chain.</div>
             </div>
 
             <div class="form-group">
               <label class="form-label">Refresh Interval (seconds)</label>
               <input type="number" id="cfg-refresh" min="3" max="60" value="5" />
-              <div class="form-hint">Minimum 3s — data stored to MySQL on every fetch</div>
+              <div class="form-hint">Minimum 3s — live data streamed over WebSockets</div>
             </div>
 
             <hr class="divider" />

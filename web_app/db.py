@@ -278,25 +278,51 @@ def get_history(
     expiry: str,
     from_dt=None,
     to_dt=None,
-    limit: int = 2000,
+    duration: str | None = None,
+    snapshots_limit: int = 20,
 ) -> list[dict]:
     try:
         conn = get_conn()
         cur = conn.cursor(dictionary=True)
-        params: list = [underlying, expiry]
-        where = "WHERE underlying = %s AND expiry = %s"
+
+        where_clauses = ["underlying = %s", "expiry = %s"]
+        sub_params = [underlying, expiry]
+
         if from_dt:
-            where += " AND fetch_time >= %s"
-            params.append(from_dt)
+            where_clauses.append("fetch_time >= %s")
+            sub_params.append(from_dt)
         if to_dt:
-            where += " AND fetch_time <= %s"
-            params.append(to_dt)
-        params.append(limit)
-        cur.execute(
-            f"SELECT * FROM option_chain_snapshots {where} "
-            "ORDER BY fetch_time DESC, strike_price ASC LIMIT %s",
-            params,
-        )
+            where_clauses.append("fetch_time <= %s")
+            sub_params.append(to_dt)
+        if duration and duration.strip() and duration.lower() != "all":
+            where_clauses.append("duration LIKE %s")
+            sub_params.append(f"%{duration.strip()}%")
+
+        where_sql = " WHERE " + " AND ".join(where_clauses)
+
+        if snapshots_limit > 0:
+            sub_params.append(snapshots_limit)
+            subquery = (
+                f"SELECT fetch_time FROM ("
+                f"  SELECT DISTINCT fetch_time FROM option_chain_snapshots"
+                f"  {where_sql}"
+                f"  ORDER BY fetch_time DESC LIMIT %s"
+                f") AS recent_t"
+            )
+            main_sql = (
+                f"SELECT * FROM option_chain_snapshots"
+                f" WHERE underlying = %s AND expiry = %s AND fetch_time IN ({subquery})"
+                f" ORDER BY fetch_time DESC, strike_price ASC"
+            )
+            params = [underlying, expiry] + sub_params
+        else:
+            main_sql = (
+                f"SELECT * FROM option_chain_snapshots {where_sql}"
+                f" ORDER BY fetch_time DESC, strike_price ASC"
+            )
+            params = sub_params
+
+        cur.execute(main_sql, params)
         rows = cur.fetchall()
         cur.close(); conn.close()
         return _serialise(rows)

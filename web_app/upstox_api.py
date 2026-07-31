@@ -183,7 +183,7 @@ def get_atm_strike(data: list, spot: float | None) -> float | None:
 
 
 def filter_strikes(data: list, spot: float | None, n: int | None) -> list:
-    if n is None or spot is None or not data:
+    if n is None or n <= 0 or spot is None or not data:
         return data
     strikes = [r["strike_price"] for r in data]
     atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - spot))

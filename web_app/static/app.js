@@ -1176,15 +1176,16 @@ function setHistoryRange(preset) {
 
 async function loadHistory() {
   const expiry = $('history-expiry-sel')?.value;
+  const duration = $('history-duration')?.value || 'all';
   const from = dtLocalToApi($('history-from')?.value);
   const to = dtLocalToApi($('history-to')?.value);
-  const limit = $('history-limit')?.value || 500;
+  const snapshotsLimit = $('history-limit')?.value || 20;
 
   if (!expiry) { toast('Select an expiry date.', 'warn'); return; }
 
   $('history-table-wrapper').innerHTML = `<div class="empty-state"><div class="loading-ring"></div><div class="empty-title">Loading…</div></div>`;
 
-  let url = `/api/history?expiry=${expiry}&limit=${limit}`;
+  let url = `/api/history?expiry=${expiry}&snapshots_limit=${snapshotsLimit}&duration=${encodeURIComponent(duration)}`;
   if (from) url += `&from=${encodeURIComponent(from)}`;
   if (to) url += `&to=${encodeURIComponent(to)}`;
 
@@ -1192,9 +1193,13 @@ async function loadHistory() {
     const res = await fetch(url);
     const data = await res.json();
     const rows = data.data || [];
+    const snapshotsCount = data.snapshots_count || 0;
 
     const cnt = $('history-count');
-    if (cnt) { cnt.textContent = `${rows.length} rows`; cnt.style.display = 'inline-block'; }
+    if (cnt) {
+      cnt.textContent = `${rows.length} rows (${snapshotsCount} complete snapshots)`;
+      cnt.style.display = 'inline-block';
+    }
 
     renderHistoryTable(rows, expiry);
   } catch (e) { toast(`History error: ${e}`, 'err'); }
@@ -1220,6 +1225,7 @@ function renderHistoryTable(rows, expiry) {
 
   const cols = [
     { k: 'fetch_time', l: 'Time' },
+    { k: 'duration', l: 'Duration' },
     { k: 'strike_price', l: 'Strike' },
     { k: 'spot_price', l: 'Spot' },
     { k: 'call_ltp', l: 'Call LTP' },
@@ -1246,13 +1252,14 @@ function renderHistoryTable(rows, expiry) {
     </thead>
     <tbody>`;
 
-  rows.slice(0, 2000).forEach((row, i) => {
+  rows.forEach((row, i) => {
     const cls = row.is_atm ? 'row-atm' : i % 2 === 0 ? 'row-even' : '';
     html += `<tr class="${cls}">`;
     cols.forEach(c => {
       const v = row[c.k];
       if (c.k === 'is_atm') html += `<td class="text-center">${v ? '★' : ''}</td>`;
       else if (c.k === 'fetch_time') html += `<td class="font-mono" style="font-size:0.65rem;white-space:nowrap">${v || '—'}</td>`;
+      else if (c.k === 'duration') html += `<td class="font-mono" style="font-size:0.65rem;color:var(--accent-color,#38bdf8);white-space:nowrap">${v || '5m'}</td>`;
       else {
         const n = parseFloat(v);
         html += `<td class="text-right">${isNaN(n) ? (v || '—') : n.toLocaleString('en-IN', { maximumFractionDigits: 4 })}</td>`;
@@ -1267,7 +1274,7 @@ function renderHistoryTable(rows, expiry) {
 
 // ── Export helpers ────────────────────────────────────────
 const EXPORT_COLS = [
-  'fetch_time', 'strike_price', 'spot_price',
+  'fetch_time', 'duration', 'strike_price', 'spot_price',
   'call_ltp', 'call_oi', 'call_iv', 'call_delta', 'call_gamma', 'call_theta', 'call_vega',
   'put_ltp', 'put_oi', 'put_iv', 'put_delta', 'put_gamma', 'put_theta', 'put_vega',
   'pcr', 'is_atm',
