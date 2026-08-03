@@ -581,24 +581,24 @@ body {
   box-shadow: 0 0 12px rgba(56,189,248,0.5);
 }
 
-/* % change badges — relative to table cell font so they scale with 1.2rem table */
+/* % change badges */
 .pct-up {
   display: block;
   color: var(--call);
-  font-size: 0.65em;   /* scales with .oc-table's 1.2rem → ≈ 0.78rem */
+  font-size: 0.82em;
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 1;
-  margin-top: 2px;
+  line-height: 1.1;
+  margin-top: 3px;
 }
 .pct-dn {
   display: block;
   color: var(--put);
-  font-size: 0.65em;
+  font-size: 0.82em;
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 1;
-  margin-top: 2px;
+  line-height: 1.1;
+  margin-top: 3px;
 }
 
 /* flash on update */
