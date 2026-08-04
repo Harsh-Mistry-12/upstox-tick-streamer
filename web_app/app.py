@@ -542,6 +542,14 @@ def api_expiries():
     return jsonify({"expiries": state.current_expiries})
 
 
+@app.route("/api/history/expiries")
+def api_history_expiries():
+    underlying = request.args.get("underlying", state.underlying)
+    db_expiries = db.get_available_expiries_db(underlying)
+    return jsonify({"expiries": db_expiries})
+
+
+
 @app.route("/api/fetch_expiry", methods=["POST"])
 def api_fetch_expiry():
     """

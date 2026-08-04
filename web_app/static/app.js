@@ -93,6 +93,7 @@ function navigate(page) {
   if (navEl) navEl.classList.add('active');
 
   // auto-refresh
+  if (page === 'history') loadHistoryExpiries();
   if (page === 'greeks' && App.greeksExpiry && App.greeksStrike) loadGreeksHistory();
   if (page === 'formulas') fetchAndRenderFormulas();
 }
@@ -403,14 +404,13 @@ function renderExpiryTabs() {
     container.appendChild(btn);
   });
 
-  // Sync expiry selects on other pages
-  ['greeks-expiry-sel', 'history-expiry-sel'].forEach(id => {
-    const sel = $(id);
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = App.expiries.map(e => `<option value="${e}" ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
-    if (!cur && App.currentExpiry) sel.value = App.currentExpiry;
-  });
+  // Sync expiry select on greeks page
+  const greeksSel = $('greeks-expiry-sel');
+  if (greeksSel) {
+    const cur = greeksSel.value;
+    greeksSel.innerHTML = App.expiries.map(e => `<option value="${e}" ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
+    if (!cur && App.currentExpiry) greeksSel.value = App.currentExpiry;
+  }
 }
 
 // ── Option Chain Table ────────────────────────────────────
@@ -1139,6 +1139,37 @@ $('formula-save-btn')?.addEventListener('click', async () => {
 
 // ── History ───────────────────────────────────────────────
 
+async function loadHistoryExpiries() {
+  const sel = $('history-expiry-sel');
+  if (!sel) return;
+  const currentVal = sel.value;
+
+  try {
+    const res = await fetch(`/api/history/expiries?underlying=${encodeURIComponent(App.underlying || 'NSE_INDEX|Nifty 50')}`);
+    const data = await res.json();
+    const expiries = data.expiries || [];
+    
+    if (expiries.length === 0) {
+      sel.innerHTML = '<option value="">No stored history expiries</option>';
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    sel.innerHTML = expiries.map(e => {
+      const isPast = e < todayStr;
+      const label = isPast ? `${e} (Past)` : e;
+      return `<option value="${e}" ${e === currentVal ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+
+    // If currentVal wasn't set or not in list, select the most recent/latest expiry available in DB
+    if (!currentVal || !expiries.includes(currentVal)) {
+      sel.value = expiries[expiries.length - 1];
+    }
+  } catch (e) {
+    console.error('Failed to load history expiries:', e);
+  }
+}
+
 // Convert datetime-local value (YYYY-MM-DDTHH:MM) to API format (YYYY-MM-DD HH:MM)
 function dtLocalToApi(v) {
   return v ? v.replace('T', ' ') : '';
@@ -1480,13 +1511,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const from = new Date(now.getTime() - 3 * 60 * 60 * 1000);
   if ($('history-to')) $('history-to').value = toDatetimeLocal(now);
   if ($('history-from')) $('history-from').value = toDatetimeLocal(from);
+  loadHistoryExpiries();
 });
 
 // Expose globals for inline onclick handlers
 Object.assign(window, {
   navigate, startStream, stopStream, toggleSidebar,
   openAuthUrl, submitAuthCode, submitManualToken, saveConfig,
-  loadGreeksHistory, loadHistory,
+  loadGreeksHistory, loadHistory, loadHistoryExpiries,
   setHistoryRange, exportHistoryCSV, exportHistoryExcel,
   editFormula, deleteFormula, clearFormulaForm, insertVar,
   closeGreeksModal,
